@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Security Maturity Assessment</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#000;--text:#f5f5f7;--text2:#86868b;--text3:#48484a;--blue:#307FE2;--orange:#FFB900;--red:#DA291C;--green:#3CB17E;--purple:#9063CD;--teal:#2CCCD3}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
+
+.app{height:100%;display:flex;flex-direction:column}
+
+/* ── TOPBAR ── */
+.topbar{height:54px;display:flex;align-items:center;justify-content:space-between;padding:0 28px;background:rgba(0,0,0,0.85);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,0.06);flex-shrink:0;z-index:10}
+.topbar-left{display:flex;align-items:center;gap:14px}
+.topbar-title{font-size:14px;font-weight:600;color:var(--text2);letter-spacing:.5px}
+.theme-toggle{width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:all .3s;flex-shrink:0}
+.theme-toggle:hover{border-color:rgba(255,255,255,0.25);background:rgba(255,255,255,0.08)}
+.pips{display:flex;gap:6px;align-items:center}
+.pip{width:28px;height:4px;border-radius:2px;background:rgba(255,255,255,0.08);transition:all .4s}
+.pip.done{background:var(--green)}
+.pip.active{background:var(--blue);width:40px}
+
+/* ── SCENE CONTAINER ── */
+.scene-area{flex:1;overflow:hidden;position:relative}
+.scene{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;opacity:0;pointer-events:none;transition:opacity .6s,transform .6s;transform:translateX(60px)}
+.scene.active{opacity:1;pointer-events:auto;transform:translateX(0)}
+.scene.exit{opacity:0;transform:translateX(-60px)}
+
+/* ── INTRO ── */
+.intro{text-align:center;max-width:540px}
+.intro-icon{font-size:64px;margin-bottom:16px;animation:float 3s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+.intro-eyebrow{font-size:13px;font-weight:600;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:8px}
+.intro-title{font-size:clamp(32px,5vw,52px);font-weight:800;letter-spacing:-0.03em;line-height:1.08;margin-bottom:20px}
+.intro-title .gr{background:linear-gradient(135deg,var(--red),var(--blue),var(--teal));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.intro-desc{font-size:16px;color:var(--text2);line-height:1.7;margin-bottom:36px}
+.btn-start{padding:16px 40px;border-radius:28px;background:linear-gradient(135deg,var(--red),var(--blue));color:#fff;font-size:17px;font-weight:600;border:none;cursor:pointer;font-family:inherit;transition:all .2s;box-shadow:0 4px 24px rgba(218,41,28,0.2)}
+.btn-start:hover{transform:translateY(-2px);box-shadow:0 8px 36px rgba(218,41,28,0.3)}
+.intro-meta{margin-top:28px;font-size:12px;color:var(--text3)}
+
+/* ── SCENARIO ── */
+.scenario{width:100%;max-width:800px;display:flex;flex-direction:column;align-items:center}
+.scenario-visual{width:100%;height:200px;position:relative;margin-bottom:24px;display:flex;align-items:center;justify-content:center}
+
+/* Animated attack scene elements */
+.scene-diagram{position:relative;width:100%;max-width:600px;height:100%}
+.scene-element{position:absolute;display:flex;flex-direction:column;align-items:center;gap:4px;transition:all .5s}
+.scene-el-icon{width:52px;height:52px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.03)}
+.scene-el-label{font-size:9px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px}
+
+/* Animated attacker */
+.attacker{position:absolute;font-size:28px;transition:all 1.5s ease-in-out;opacity:0}
+.attacker.go{opacity:1}
+@keyframes pulse-red{0%,100%{box-shadow:0 0 0 0 rgba(218,41,28,0.4)}50%{box-shadow:0 0 0 12px rgba(218,41,28,0)}}
+.scene-el-icon.breached{border-color:rgba(218,41,28,0.5);animation:pulse-red 1.5s infinite}
+
+/* Attack path line */
+.attack-path{position:absolute;pointer-events:none;overflow:visible}
+.attack-path line{stroke:var(--red);stroke-width:2;stroke-dasharray:6 4;opacity:0.5}
+
+.scenario-narrative{text-align:center;margin-bottom:32px}
+.narrative-setup{font-size:13px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;opacity:0;animation:fadeIn .6s ease .3s forwards}
+.narrative-question{font-size:clamp(22px,3.5vw,32px);font-weight:800;line-height:1.2;letter-spacing:-0.02em;max-width:600px;margin:0 auto;opacity:0;animation:fadeIn .6s ease .6s forwards}
+@keyframes fadeIn{to{opacity:1}}
+
+/* Outcome cards */
+.outcomes{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;width:100%;max-width:700px;opacity:0;animation:fadeIn .5s ease .9s forwards}
+.outcome{padding:20px 16px;border-radius:16px;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.02);cursor:pointer;transition:all .3s;text-align:center;position:relative;overflow:hidden}
+.outcome:hover{border-color:rgba(255,255,255,0.15);background:rgba(255,255,255,0.04);transform:translateY(-2px)}
+.outcome.selected{pointer-events:none}
+.outcome.selected.red{border-color:rgba(218,41,28,0.4);background:rgba(218,41,28,0.08)}
+.outcome.selected.yellow{border-color:rgba(255,185,0,0.4);background:rgba(255,185,0,0.08)}
+.outcome.selected.green{border-color:rgba(60,177,126,0.4);background:rgba(60,177,126,0.08)}
+.outcome-icon{font-size:32px;margin-bottom:10px}
+.outcome-title{font-size:14px;font-weight:700;margin-bottom:6px}
+.outcome-desc{font-size:12px;color:var(--text2);line-height:1.5}
+.outcome .reveal{display:none;margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.06);font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase}
+.outcome.selected .reveal{display:block}
+
+/* Flash overlay on selection */
+.flash{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .15s;z-index:50}
+.flash.go{opacity:1;transition:opacity .05s}
+
+/* ── RESULTS ── */
+.results{text-align:center;max-width:580px;width:100%}
+.results-icon{font-size:56px;margin-bottom:12px}
+.results-title{font-size:clamp(28px,4vw,40px);font-weight:800;letter-spacing:-0.03em;margin-bottom:8px;line-height:1.1}
+.results-sub{font-size:15px;color:var(--text2);line-height:1.65;margin-bottom:36px}
+
+.result-cards{display:grid;grid-template-columns:1fr 1fr;gap:14px;text-align:left;margin-bottom:32px}
+.result-card{padding:20px;border-radius:16px;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.02);position:relative;overflow:hidden}
+.result-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:16px 16px 0 0}
+.result-card.red::before{background:var(--red)}
+.result-card.yellow::before{background:var(--orange)}
+.result-card.green::before{background:var(--green)}
+.rc-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.rc-domain{font-size:13px;font-weight:700}
+.rc-badge{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:3px 8px;border-radius:4px}
+.result-card.red .rc-badge{background:rgba(218,41,28,0.1);color:var(--red)}
+.result-card.yellow .rc-badge{background:rgba(255,185,0,0.1);color:var(--orange)}
+.result-card.green .rc-badge{background:rgba(60,177,126,0.1);color:var(--green)}
+.rc-text{font-size:12px;color:var(--text2);line-height:1.55}
+
+.divider{height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.06),transparent);margin:28px 0}
+.capture-title{font-size:18px;font-weight:700;margin-bottom:6px}
+.capture-desc{font-size:13px;color:var(--text2);margin-bottom:20px}
+.capture-row{display:flex;gap:10px;max-width:400px;margin:0 auto}
+.capture-input{flex:1;padding:12px 16px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:var(--text);font-size:14px;font-family:inherit;outline:none;transition:border-color .2s}
+.capture-input:focus{border-color:rgba(48,127,226,0.5)}
+.capture-input::placeholder{color:var(--text3)}
+.capture-btn{padding:12px 22px;border-radius:12px;background:linear-gradient(135deg,var(--red),var(--blue));color:#fff;font-size:14px;font-weight:600;border:none;cursor:pointer;font-family:inherit;transition:all .2s;white-space:nowrap}
+.capture-btn:hover{filter:brightness(1.1)}
+.capture-ok{display:none;font-size:14px;color:var(--green);font-weight:600;margin-top:14px}
+.capture-ok.show{display:block}
+.btn-again{margin-top:20px;padding:10px 22px;border-radius:20px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .25s}
+.btn-again:hover{background:rgba(255,255,255,0.1)}
+
+/* ── LIGHT MODE ── */
+.light-mode{--bg:#fff;--text:#1d1d1f;--text2:#6e6e73;--text3:#aeaeb2}
+.light-mode .topbar{background:rgba(255,255,255,0.88);border-bottom-color:rgba(0,0,0,0.08)}
+.light-mode .topbar-title{color:#1d1d1f}
+.light-mode .pip{background:rgba(0,0,0,0.08)}
+.light-mode .theme-toggle{border-color:rgba(0,0,0,0.12);background:rgba(0,0,0,0.04)}
+.light-mode .theme-toggle:hover{border-color:rgba(0,0,0,0.2);background:rgba(0,0,0,0.08)}
+.light-mode .scene-el-icon{border-color:rgba(0,0,0,0.1);background:rgba(0,0,0,0.03)}
+.light-mode .outcome{border-color:rgba(0,0,0,0.06);background:rgba(0,0,0,0.02)}
+.light-mode .outcome:hover{border-color:rgba(0,0,0,0.12);background:rgba(0,0,0,0.04)}
+.light-mode .outcome .reveal{border-top-color:rgba(0,0,0,0.06)}
+.light-mode .result-card{border-color:rgba(0,0,0,0.06);background:rgba(0,0,0,0.02)}
+.light-mode .capture-input{border-color:rgba(0,0,0,0.1);background:rgba(0,0,0,0.03);color:#1d1d1f}
+.light-mode .capture-input::placeholder{color:#aeaeb2}
+.light-mode .btn-again{background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.1);color:#6e6e73}
+.light-mode .divider{background:linear-gradient(90deg,transparent,rgba(0,0,0,0.08),transparent)}
+
+@media(max-width:640px){
+  .outcomes{grid-template-columns:1fr;max-width:400px}
+  .result-cards{grid-template-columns:1fr}
+  .capture-row{flex-direction:column}
+  .scenario-visual{height:140px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="theme-toggle" onclick="toggleTheme()">☀️</div>
+    <div class="topbar-title">Security Maturity Assessment</div>
+  </div>
+  <div class="pips" id="pips"></div>
+</div>
+
+<div class="scene-area">
+
+  <!-- INTRO -->
+  <div class="scene active" id="sceneIntro">
+    <div class="intro">
+      <div class="intro-icon">🛡️</div>
+      <div class="intro-eyebrow">Interactive Assessment</div>
+      <div class="intro-title">Four attacks.<br>Four <span class="gr">moments of truth.</span></div>
+      <div class="intro-desc">We'll walk you through four real attack scenarios. At each moment, tell us what happens in your environment — and we'll show you where you stand.</div>
+      <button class="btn-start" onclick="begin()">Start the Scenarios</button>
+      <div class="intro-meta">~2 minutes · 4 scenarios · instant results</div>
+    </div>
+  </div>
+
+  <!-- SCENARIOS (built by JS) -->
+  <div class="scene" id="sceneScenario"></div>
+
+  <!-- RESULTS -->
+  <div class="scene" id="sceneResults">
+    <div class="results">
+      <div class="results-icon" id="resIcon"></div>
+      <div class="results-title" id="resTitle"></div>
+      <div class="results-sub" id="resSub"></div>
+      <div class="result-cards" id="resCards"></div>
+      <div class="divider"></div>
+      <div class="capture-title">Get Your Detailed Report</div>
+      <div class="capture-desc">We'll send personalized recommendations for your flagged areas.</div>
+      <div class="capture-row" id="capRow">
+        <input type="email" class="capture-input" id="capEmail" placeholder="work@company.com">
+        <button class="capture-btn" onclick="sendReport()">Send Report</button>
+      </div>
+      <div class="capture-ok" id="capOk">✓ Report sent — we'll follow up on your flagged areas.</div>
+      <button class="btn-again" onclick="restart()">↺ Retake Assessment</button>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<div class="flash" id="flash"></div>
+
+<script>
+function toggleTheme(){
+  const l=document.documentElement.classList.toggle('light-mode');
+  document.querySelectorAll('.theme-toggle').forEach(e=>e.textContent=l?'🌙':'☀️');
+}
+
+const scenarios=[
+  {
+    id:'network',
+    domain:'Network Security',
+    color:'#307FE2',
+    setup:'SCENARIO 1 — LATERAL MOVEMENT',
+    question:'An attacker is inside your network,\nmoving between systems. What happens?',
+    visual:{
+      elements:[
+        {icon:'💻',label:'Workstation',x:'8%',y:'35%'},
+        {icon:'🔥',label:'Firewall',x:'30%',y:'35%'},
+        {icon:'🗄️',label:'Server',x:'55%',y:'20%'},
+        {icon:'🗄️',label:'Database',x:'55%',y:'55%'},
+        {icon:'💀',label:'',x:'80%',y:'35%',attacker:true},
+      ],
+      attackFrom:{x:'80%',y:'35%'},
+      attackTo:{x:'55%',y:'55%'},
+    },
+    outcomes:[
+      {icon:'🚨',title:'They move freely',desc:'We focus on perimeter traffic. Once inside, lateral movement is mostly uninspected.',score:0,color:'red',
+       reveal:'AT RISK',insight:'Without east-west inspection, internal breaches spread unchecked.'},
+      {icon:'⚠️',title:'We catch some of it',desc:'We have segmentation but don\'t inspect all internal traffic consistently.',score:1,color:'yellow',
+       reveal:'PARTIAL',insight:'Segmentation helps but gaps in inspection leave blind spots.'},
+      {icon:'✅',title:'Blocked at the boundary',desc:'We inspect lateral traffic and enforce policy between all internal zones.',score:2,color:'green',
+       reveal:'STRONG',insight:'Full east-west inspection is the gold standard.'},
+    ]
+  },
+  {
+    id:'webapp',
+    domain:'Web App Security',
+    color:'#9063CD',
+    setup:'SCENARIO 2 — WEB APPLICATION ATTACK',
+    question:'A SQL injection targets your\npublic-facing application. What stops it?',
+    visual:{
+      elements:[
+        {icon:'🌐',label:'Internet',x:'8%',y:'35%'},
+        {icon:'💣',label:'SQLi Payload',x:'32%',y:'35%',attacker:true},
+        {icon:'🌍',label:'Web App',x:'58%',y:'35%'},
+        {icon:'🗄️',label:'Customer DB',x:'82%',y:'35%'},
+      ],
+    },
+    outcomes:[
+      {icon:'🚨',title:'It hits the app directly',desc:'We rely on the application\'s built-in input validation. No dedicated web app protection.',score:0,color:'red',
+       reveal:'AT RISK',insight:'Apps without a WAF are exposed to the full OWASP Top 10.'},
+      {icon:'⚠️',title:'We have basic protection',desc:'Some apps are protected but coverage isn\'t consistent. Rules aren\'t tuned regularly.',score:1,color:'yellow',
+       reveal:'PARTIAL',insight:'Inconsistent WAF coverage means some apps are still exposed.'},
+      {icon:'✅',title:'WAF blocks it cold',desc:'All internet-facing apps sit behind a WAF with tuned rulesets and API protection.',score:2,color:'green',
+       reveal:'STRONG',insight:'Comprehensive WAF coverage with tuned rules is best practice.'},
+    ]
+  },
+  {
+    id:'cloud',
+    domain:'Cloud Security',
+    color:'#2CCCD3',
+    setup:'SCENARIO 3 — CLOUD MISCONFIGURATION',
+    question:'A storage bucket is misconfigured\nand publicly exposed. How long until you know?',
+    visual:{
+      elements:[
+        {icon:'☁️',label:'Cloud',x:'20%',y:'25%'},
+        {icon:'📦',label:'Storage',x:'50%',y:'25%',breach:true},
+        {icon:'🔓',label:'Public!',x:'50%',y:'60%',attacker:true},
+        {icon:'👤',label:'IAM',x:'80%',y:'25%'},
+      ],
+    },
+    outcomes:[
+      {icon:'🚨',title:'Next audit — months',desc:'We rely on periodic reviews and native cloud tools. Real-time visibility is limited.',score:0,color:'red',
+       reveal:'AT RISK',insight:'Months of exposure means months of potential data exfiltration.'},
+      {icon:'⚠️',title:'Within a week',desc:'We have some scanning but it runs on a schedule, not continuously.',score:1,color:'yellow',
+       reveal:'PARTIAL',insight:'Scheduled scans miss fast-moving misconfigurations.'},
+      {icon:'✅',title:'Minutes — automated alert',desc:'Continuous posture monitoring with real-time alerting and auto-remediation.',score:2,color:'green',
+       reveal:'STRONG',insight:'Continuous monitoring is the only way to keep pace with cloud change.'},
+    ]
+  },
+  {
+    id:'saas',
+    domain:'SaaS Security',
+    color:'#FFB900',
+    setup:'SCENARIO 4 — SHADOW SAAS & OAUTH',
+    question:'A third-party app just got OAuth access\nto your corporate email. What happens?',
+    visual:{
+      elements:[
+        {icon:'📧',label:'Email / M365',x:'20%',y:'35%'},
+        {icon:'🔗',label:'OAuth Token',x:'48%',y:'35%'},
+        {icon:'👻',label:'Shadow App',x:'75%',y:'20%',attacker:true},
+        {icon:'📱',label:'Unknown SaaS',x:'75%',y:'55%',attacker:true},
+      ],
+    },
+    outcomes:[
+      {icon:'🚨',title:'Nobody notices',desc:'We don\'t actively monitor OAuth integrations or shadow SaaS. Users connect what they want.',score:0,color:'red',
+       reveal:'AT RISK',insight:'Unmonitored OAuth = unlimited third-party access to your data.'},
+      {icon:'⚠️',title:'We\'d find it eventually',desc:'We review integrations periodically but it\'s a manual process.',score:1,color:'yellow',
+       reveal:'PARTIAL',insight:'Manual reviews can\'t keep pace with the rate of SaaS adoption.'},
+      {icon:'✅',title:'Flagged and revoked',desc:'We continuously monitor OAuth grants and can auto-revoke risky integrations.',score:2,color:'green',
+       reveal:'STRONG',insight:'Continuous SaaS monitoring prevents silent data exfiltration.'},
+    ]
+  },
+];
+
+let current=0;
+const scores={};
+
+function updatePips(){
+  const el=document.getElementById('pips');
+  el.innerHTML='';
+  scenarios.forEach((_,i)=>{
+    const p=document.createElement('div');
+    p.className='pip'+(i<current?' done':i===current?' active':'');
+    el.appendChild(p);
+  });
+}
+
+function goTo(id){
+  document.querySelectorAll('.scene').forEach(s=>{
+    if(s.classList.contains('active')){s.classList.remove('active');s.classList.add('exit')}
+    else{s.classList.remove('exit')}
+  });
+  setTimeout(()=>{
+    document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active','exit'));
+    document.getElementById(id).classList.add('active');
+  },300);
+}
+
+function begin(){
+  current=0;
+  Object.keys(scores).forEach(k=>delete scores[k]);
+  updatePips();
+  renderScenario();
+  goTo('sceneScenario');
+}
+
+function renderScenario(){
+  const s=scenarios[current];
+  const el=document.getElementById('sceneScenario');
+
+  let visualHTML='<div class="scene-diagram">';
+  s.visual.elements.forEach(e=>{
+    const cls=e.attacker?'scene-el-icon breached':'scene-el-icon';
+    visualHTML+=`<div class="scene-element" style="left:${e.x};top:${e.y}">
+      <div class="${cls}">${e.icon}</div>
+      ${e.label?`<div class="scene-el-label">${e.label}</div>`:''}
+    </div>`;
+  });
+  visualHTML+='</div>';
+
+  const outcomesHTML=s.outcomes.map((o,i)=>`
+    <div class="outcome" onclick="pick(${i})" id="out${i}">
+      <div class="outcome-icon">${o.icon}</div>
+      <div class="outcome-title">${o.title}</div>
+      <div class="outcome-desc">${o.desc}</div>
+      <div class="reveal" style="color:${o.color==='red'?'var(--red)':o.color==='yellow'?'var(--orange)':'var(--green)'}">${o.reveal}</div>
+    </div>
+  `).join('');
+
+  el.innerHTML=`
+    <div class="scenario">
+      <div class="scenario-visual">${visualHTML}</div>
+      <div class="scenario-narrative">
+        <div class="narrative-setup" style="color:${s.color}">${s.setup}</div>
+        <div class="narrative-question">${s.question.replace(/\n/g,'<br>')}</div>
+      </div>
+      <div class="outcomes">${outcomesHTML}</div>
+    </div>
+  `;
+  updatePips();
+}
+
+function pick(idx){
+  const s=scenarios[current];
+  const o=s.outcomes[idx];
+  scores[s.id]={score:o.score,level:o.reveal,color:o.color,domain:s.domain,insight:o.insight};
+
+  // Mark selected, dim others
+  document.querySelectorAll('.outcome').forEach((el,i)=>{
+    if(i===idx){el.classList.add('selected',o.color)}
+    else{el.style.opacity='0.3';el.style.pointerEvents='none'}
+  });
+
+  // Flash
+  const colors={red:'rgba(218,41,28,0.15)',yellow:'rgba(255,185,0,0.12)',green:'rgba(60,177,126,0.12)'};
+  const flash=document.getElementById('flash');
+  flash.style.background=colors[o.color];
+  flash.classList.add('go');
+  setTimeout(()=>flash.classList.remove('go'),200);
+
+  // Advance after pause
+  setTimeout(()=>{
+    if(current<scenarios.length-1){
+      current++;
+      renderScenario();
+      goTo('sceneScenario');
+    } else {
+      showResults();
+    }
+  },1800);
+}
+
+function showResults(){
+  const entries=Object.values(scores);
+  const total=entries.reduce((a,e)=>a+e.score,0);
+  const max=scenarios.length*2;
+  const pct=Math.round((total/max)*100);
+
+  const reds=entries.filter(e=>e.color==='red').length;
+  const yellows=entries.filter(e=>e.color==='yellow').length;
+
+  let icon,title,sub;
+  if(pct>=80){
+    icon='🏆';title='Strong Posture';
+    sub='You\'re well-covered across all four domains. Even so, review the details below — there may be areas to strengthen further.';
+  } else if(reds===0){
+    icon='⚡';title='Getting There';
+    sub='No critical gaps, but partial coverage in some areas means attackers still have options. Here\'s where to tighten up.';
+  } else if(reds>=3){
+    icon='🔴';title='Significant Gaps';
+    sub='Multiple domains are at risk. The good news: you now know exactly where the exposure is. Here\'s the breakdown.';
+  } else {
+    icon='⚠️';title='Mixed Posture';
+    sub='You have strengths, but notable gaps remain. Focus on the red areas below — those are where an attacker would look first.';
+  }
+
+  document.getElementById('resIcon').textContent=icon;
+  document.getElementById('resTitle').textContent=title;
+  document.getElementById('resSub').textContent=sub;
+
+  const cards=document.getElementById('resCards');
+  cards.innerHTML='';
+  entries.forEach(e=>{
+    cards.innerHTML+=`
+      <div class="result-card ${e.color}">
+        <div class="rc-header">
+          <span class="rc-domain">${e.domain}</span>
+          <span class="rc-badge">${e.level}</span>
+        </div>
+        <div class="rc-text">${e.insight}</div>
+      </div>`;
+  });
+
+  document.getElementById('capRow').style.display='flex';
+  document.getElementById('capOk').classList.remove('show');
+  document.getElementById('capEmail').value='';
+
+  current=scenarios.length;
+  updatePips();
+  goTo('sceneResults');
+}
+
+function sendReport(){
+  const email=document.getElementById('capEmail').value.trim();
+  if(!email||!email.includes('@'))return;
+  const payload={email,results:scores,timestamp:new Date().toISOString()};
+  console.log('Assessment payload:',JSON.stringify(payload,null,2));
+  document.getElementById('capRow').style.display='none';
+  document.getElementById('capOk').classList.add('show');
+}
+
+function restart(){
+  current=0;
+  Object.keys(scores).forEach(k=>delete scores[k]);
+  updatePips();
+  goTo('sceneIntro');
+}
+
+updatePips();
+</script>
+</body>
+</html>
