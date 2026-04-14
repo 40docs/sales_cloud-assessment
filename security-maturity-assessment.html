@@ -70,7 +70,9 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
 .attack-path line{stroke:var(--red);stroke-width:2;stroke-dasharray:6 4;opacity:0.5}
 
 .scenario-narrative{text-align:center;margin-bottom:32px}
-.narrative-setup{font-size:clamp(28px,4.5vw,44px);font-weight:800;letter-spacing:-0.01em;line-height:1.1;text-transform:uppercase;color:var(--red);margin-bottom:16px;opacity:0;animation:fadeIn .6s ease .3s forwards}
+.narrative-setup{margin-bottom:18px;opacity:0;animation:fadeIn .6s ease .3s forwards}
+.setup-prefix{display:block;font-size:12px;font-weight:600;letter-spacing:2.5px;text-transform:uppercase;color:var(--red);margin-bottom:8px;opacity:0.75}
+.setup-title{display:block;font-size:clamp(22px,3.2vw,32px);font-weight:800;letter-spacing:-0.01em;line-height:1.1;text-transform:uppercase;color:var(--red)}
 .narrative-story{font-size:clamp(16px,1.9vw,19px);font-weight:400;line-height:1.55;color:var(--text2);max-width:620px;margin:0 auto 16px;opacity:0;animation:fadeIn .6s ease .5s forwards}
 .narrative-question{font-size:13px;font-weight:700;letter-spacing:1.8px;text-transform:uppercase;color:var(--text);max-width:620px;margin:0 auto;opacity:0;animation:fadeIn .6s ease .7s forwards}
 @keyframes fadeIn{to{opacity:1}}
@@ -363,6 +365,7 @@ function begin(){
 function renderScenario(){
   const s=scenarios[current];
   const el=document.getElementById('sceneScenario');
+  const [setupPrefix,setupTitle]=s.setup.split(' — ');
 
   let visualHTML='<div class="scene-diagram">';
   s.visual.elements.forEach(e=>{
@@ -386,7 +389,10 @@ function renderScenario(){
   el.innerHTML=`
     <div class="scenario">
       <div class="scenario-narrative">
-        <div class="narrative-setup">${s.setup}</div>
+        <div class="narrative-setup">
+          <span class="setup-prefix">${setupPrefix}</span>
+          <span class="setup-title">${setupTitle}</span>
+        </div>
         <div class="narrative-story">${s.story}</div>
         <div class="narrative-question">${s.question}</div>
       </div>
