@@ -23,8 +23,10 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
 .theme-toggle:hover{border-color:rgba(255,255,255,0.3);background:rgba(0,0,0,0.8);transform:scale(1.05)}
 .pips{display:flex;gap:6px;align-items:center}
 .pip{width:28px;height:4px;border-radius:2px;background:rgba(255,255,255,0.08);transition:all .4s}
-.pip.done{background:var(--green)}
-.pip.active{background:var(--blue);width:40px}
+.pip.active{background:var(--text2);width:40px}
+.pip.red{background:var(--red)}
+.pip.yellow{background:var(--orange)}
+.pip.green{background:var(--green)}
 
 /* ── SCENE CONTAINER ── */
 .scene-area{flex:1;overflow:hidden;position:relative}
@@ -333,9 +335,13 @@ function validateEmail(){
 function updatePips(){
   const el=document.getElementById('pips');
   el.innerHTML='';
-  scenarios.forEach((_,i)=>{
+  scenarios.forEach((s,i)=>{
     const p=document.createElement('div');
-    p.className='pip'+(i<current?' done':i===current?' active':'');
+    const sc=scores[s.id];
+    let cls='pip';
+    if(sc)cls+=' '+sc.color;
+    else if(i===current)cls+=' active';
+    p.className=cls;
     el.appendChild(p);
   });
 }
@@ -407,6 +413,7 @@ function pick(idx){
   const s=scenarios[current];
   const o=s.outcomes[idx];
   scores[s.id]={score:o.score,level:o.reveal,color:o.color,domain:s.domain,insight:o.insight};
+  updatePips();
 
   // Mark selected, dim others
   document.querySelectorAll('.outcome').forEach((el,i)=>{
