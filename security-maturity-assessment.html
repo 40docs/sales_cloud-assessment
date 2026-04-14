@@ -70,8 +70,9 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
 .attack-path line{stroke:var(--red);stroke-width:2;stroke-dasharray:6 4;opacity:0.5}
 
 .scenario-narrative{text-align:center;margin-bottom:32px}
-.narrative-setup{font-size:13px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;opacity:0;animation:fadeIn .6s ease .3s forwards}
-.narrative-question{font-size:clamp(22px,3.5vw,32px);font-weight:800;line-height:1.2;letter-spacing:-0.02em;max-width:600px;margin:0 auto;opacity:0;animation:fadeIn .6s ease .6s forwards}
+.narrative-setup{font-size:13px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--red);margin-bottom:10px;opacity:0;animation:fadeIn .6s ease .3s forwards}
+.narrative-story{font-size:clamp(15px,1.8vw,17px);font-weight:400;line-height:1.55;color:var(--text2);max-width:580px;margin:0 auto 14px;opacity:0;animation:fadeIn .6s ease .5s forwards}
+.narrative-question{font-size:clamp(24px,3.5vw,34px);font-weight:800;line-height:1.15;letter-spacing:-0.02em;max-width:620px;margin:0 auto;opacity:0;animation:fadeIn .6s ease .7s forwards}
 @keyframes fadeIn{to{opacity:1}}
 
 /* Outcome cards */
@@ -221,7 +222,8 @@ const scenarios=[
     domain:'Network',
     color:'#307FE2',
     setup:'SCENARIO 1 — THE ATTACKER IS INSIDE',
-    question:'Someone clicked a phishing link.\nHow far can the attacker reach?',
+    story:'Someone clicked a phishing link and their laptop is now compromised.',
+    question:'How far can the attacker reach?',
     visual:{
       elements:[
         {icon:'📧',label:'Phish',x:'5%',y:'35%'},
@@ -245,7 +247,8 @@ const scenarios=[
     domain:'App',
     color:'#9063CD',
     setup:'SCENARIO 2 — LOGIN PAGE UNDER SIEGE',
-    question:'A bot army is testing millions of stolen\npasswords against your login page. What happens?',
+    story:'A bot army is testing millions of stolen passwords against your customer login page.',
+    question:'What happens?',
     visual:{
       elements:[
         {icon:'🤖',label:'Bots',x:'5%',y:'15%',attacker:true},
@@ -268,7 +271,8 @@ const scenarios=[
     domain:'CNAPP',
     color:'#2CCCD3',
     setup:'SCENARIO 3 — CLOUD MISSTEP',
-    question:'An engineer spun up a new service in AWS —\nwith a public bucket and an over-permissioned role. How long until you know?',
+    story:'An engineer spun up a new service in AWS with a public bucket and an over-permissioned IAM role.',
+    question:'How long until you know?',
     visual:{
       elements:[
         {icon:'👨‍💻',label:'Engineer',x:'5%',y:'35%'},
@@ -292,7 +296,8 @@ const scenarios=[
     domain:'SSPM',
     color:'#FFB900',
     setup:'SCENARIO 4 — THE DEPARTING ADMIN',
-    question:'A sales rep just left for a competitor. They had admin\nin four SaaS apps IT didn\'t know about. What\'s the risk?',
+    story:'A sales rep just left for a competitor. They had admin rights in four SaaS apps IT didn\'t know about.',
+    question:'What\'s the risk?',
     visual:{
       elements:[
         {icon:'🚶',label:'Ex-Employee',x:'5%',y:'35%',attacker:true},
@@ -382,8 +387,9 @@ function renderScenario(){
     <div class="scenario">
       <div class="scenario-visual">${visualHTML}</div>
       <div class="scenario-narrative">
-        <div class="narrative-setup" style="color:${s.color}">${s.setup}</div>
-        <div class="narrative-question">${s.question.replace(/\n/g,'<br>')}</div>
+        <div class="narrative-setup">${s.setup}</div>
+        <div class="narrative-story">${s.story}</div>
+        <div class="narrative-question">${s.question}</div>
       </div>
       <div class="outcomes">${outcomesHTML}</div>
     </div>
