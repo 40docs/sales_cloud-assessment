@@ -56,9 +56,9 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
 
 /* Animated attack scene elements */
 .scene-diagram{position:relative;width:100%;max-width:600px;height:100%}
-.scene-element{position:absolute;display:flex;flex-direction:column;align-items:center;gap:4px;transition:all .5s}
-.scene-el-icon{width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.03)}
-.scene-el-label{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:1px}
+.scene-element{position:absolute;display:flex;flex-direction:column;align-items:center;gap:4px;transform:translate(-50%,-50%);transition:all .5s}
+.scene-el-icon{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.03)}
+.scene-el-label{display:none}
 
 /* Animated attacker */
 .attacker{position:absolute;font-size:28px;transition:all 1.5s ease-in-out;opacity:0}
@@ -223,11 +223,11 @@ const scenarios=[
     question:'How far can the attacker reach?',
     visual:{
       elements:[
-        {icon:'📧',label:'Phish',x:'5%',y:'35%'},
-        {icon:'💻',label:'Laptop',x:'28%',y:'35%',attacker:true},
-        {icon:'🗄️',label:'File Server',x:'55%',y:'15%'},
-        {icon:'💰',label:'Finance',x:'55%',y:'55%'},
-        {icon:'🔐',label:'Secrets',x:'82%',y:'35%'},
+        {icon:'📧',label:'Phish',x:'12%',y:'50%'},
+        {icon:'💻',label:'Laptop',x:'36%',y:'50%',attacker:true},
+        {icon:'🗄️',label:'File Server',x:'72%',y:'22%'},
+        {icon:'💰',label:'Finance',x:'72%',y:'50%'},
+        {icon:'🔐',label:'Secrets',x:'72%',y:'78%'},
       ],
     },
     outcomes:[
@@ -248,10 +248,10 @@ const scenarios=[
     question:'What happens?',
     visual:{
       elements:[
-        {icon:'🤖',label:'Bots',x:'5%',y:'15%',attacker:true},
-        {icon:'🤖',label:'',x:'5%',y:'55%',attacker:true},
-        {icon:'🔐',label:'Login Page',x:'42%',y:'35%'},
-        {icon:'👥',label:'Customer Accounts',x:'78%',y:'35%'},
+        {icon:'🤖',label:'Bots',x:'15%',y:'25%',attacker:true},
+        {icon:'🤖',label:'',x:'15%',y:'75%',attacker:true},
+        {icon:'🔐',label:'Login Page',x:'50%',y:'50%'},
+        {icon:'👥',label:'Customer Accounts',x:'85%',y:'50%'},
       ],
     },
     outcomes:[
@@ -272,11 +272,11 @@ const scenarios=[
     question:'How long until you know?',
     visual:{
       elements:[
-        {icon:'👨‍💻',label:'Engineer',x:'5%',y:'35%'},
-        {icon:'☁️',label:'AWS',x:'30%',y:'35%'},
-        {icon:'🔑',label:'IAM Role',x:'58%',y:'15%',attacker:true},
-        {icon:'📦',label:'S3 Bucket',x:'58%',y:'55%',attacker:true},
-        {icon:'🌐',label:'Internet',x:'85%',y:'35%'},
+        {icon:'👨‍💻',label:'Engineer',x:'15%',y:'50%'},
+        {icon:'☁️',label:'AWS',x:'38%',y:'50%'},
+        {icon:'🔑',label:'IAM Role',x:'62%',y:'25%',attacker:true},
+        {icon:'📦',label:'S3 Bucket',x:'62%',y:'75%',attacker:true},
+        {icon:'🌐',label:'Internet',x:'85%',y:'50%'},
       ],
     },
     outcomes:[
@@ -297,11 +297,11 @@ const scenarios=[
     question:'What\'s the risk?',
     visual:{
       elements:[
-        {icon:'🚶',label:'Ex-Employee',x:'5%',y:'35%',attacker:true},
-        {icon:'📧',label:'Email',x:'38%',y:'15%'},
-        {icon:'💼',label:'CRM',x:'62%',y:'15%'},
-        {icon:'📊',label:'Analytics',x:'38%',y:'55%'},
-        {icon:'💬',label:'Chat',x:'62%',y:'55%'},
+        {icon:'🚶',label:'Ex-Employee',x:'15%',y:'50%',attacker:true},
+        {icon:'📧',label:'Email',x:'50%',y:'25%'},
+        {icon:'💼',label:'CRM',x:'78%',y:'25%'},
+        {icon:'📊',label:'Analytics',x:'50%',y:'75%'},
+        {icon:'💬',label:'Chat',x:'78%',y:'75%'},
       ],
     },
     outcomes:[
