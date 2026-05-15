@@ -308,13 +308,13 @@ tbody tr.priority:hover{background:rgba(218,41,28,0.07)}
         </div>
         <div class="leads-head-filters">
           <div class="leads-filters">
-            <button class="filter-chip active">All</button>
-            <button class="filter-chip">New</button>
-            <button class="filter-chip">Contacted</button>
-            <button class="filter-chip">Qualified</button>
-            <button class="filter-chip">High Priority</button>
+            <button class="filter-chip active" data-filter="all">All</button>
+            <button class="filter-chip" data-filter="new">New</button>
+            <button class="filter-chip" data-filter="contacted">Contacted</button>
+            <button class="filter-chip" data-filter="qualified">Qualified</button>
+            <button class="filter-chip" data-filter="priority">High Priority</button>
           </div>
-          <input class="filter-search" placeholder="Search email or company">
+          <input class="filter-search" id="leadSearch" placeholder="Search email or company">
         </div>
       </div>
 
@@ -611,6 +611,66 @@ function toggleTheme(){
   const l=document.documentElement.classList.toggle('light-mode');
   document.querySelectorAll('.theme-toggle').forEach(e=>e.textContent=l?'🌙':'☀️');
 }
+
+(function(){
+  const rows=document.querySelectorAll('tbody tr');
+  const chips=document.querySelectorAll('.filter-chip');
+  const search=document.getElementById('leadSearch');
+  const countEl=document.querySelector('.foot-info');
+  const tbody=document.querySelector('tbody');
+  const colCount=document.querySelectorAll('thead th').length;
+  let activeFilter='all';
+
+  const emptyRow=document.createElement('tr');
+  emptyRow.className='empty-row';
+  emptyRow.innerHTML=`<td colspan="${colCount}" style="padding:32px 16px;text-align:center;color:var(--text3);font-size:13px">No leads match these filters.</td>`;
+  emptyRow.style.display='none';
+  tbody.appendChild(emptyRow);
+
+  function getStatus(row){
+    const badge=row.querySelector('.badge');
+    if(!badge)return '';
+    const t=badge.textContent.toLowerCase().trim();
+    if(t.includes('new'))return 'new';
+    if(t.includes('contacted'))return 'contacted';
+    if(t.includes('qualified'))return 'qualified';
+    if(t.includes('meeting'))return 'meeting';
+    if(t.includes('closed'))return 'closed';
+    return '';
+  }
+
+  function apply(){
+    const q=(search.value||'').toLowerCase().trim();
+    let visible=0;
+    rows.forEach(row=>{
+      if(row.classList.contains('empty-row'))return;
+      const status=getStatus(row);
+      const priority=row.classList.contains('priority');
+      const text=row.textContent.toLowerCase();
+      const statusMatch=activeFilter==='all'
+        ||(activeFilter==='priority'&&priority)
+        ||status===activeFilter;
+      const searchMatch=!q||text.includes(q);
+      const show=statusMatch&&searchMatch;
+      row.style.display=show?'':'none';
+      if(show)visible++;
+    });
+    emptyRow.style.display=visible===0?'':'none';
+    countEl.textContent=visible===0
+      ? 'No matching leads'
+      : `Showing ${visible} of 47 leads`;
+  }
+
+  chips.forEach(chip=>{
+    chip.addEventListener('click',()=>{
+      chips.forEach(c=>c.classList.remove('active'));
+      chip.classList.add('active');
+      activeFilter=chip.dataset.filter;
+      apply();
+    });
+  });
+  search.addEventListener('input',apply);
+})();
 </script>
 </body>
 </html>
