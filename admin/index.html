@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — Security Maturity Assessment</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#000;--surface:#0a0a0a;--surface2:#141414;--text:#f5f5f7;--text2:#86868b;--text3:#48484a;--border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.1);--blue:#307FE2;--orange:#FFB900;--red:#DA291C;--green:#3CB17E;--purple:#9063CD;--teal:#2CCCD3}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100%;background:var(--bg)}
+body{font-family:'Inter',system-ui,sans-serif;color:var(--text);-webkit-font-smoothing:antialiased}
+
+.app{min-height:100vh;display:flex;flex-direction:column}
+
+/* ── TOPBAR ── */
+.topbar{position:sticky;top:0;height:54px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;background:rgba(0,0,0,0.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border);z-index:10}
+.topbar-left{display:flex;align-items:center;gap:14px}
+.brand-logo{height:18px;width:auto;color:var(--text);flex-shrink:0}
+.brand-sep{width:1px;height:18px;background:var(--border2);flex-shrink:0}
+.topbar-title{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:1.8px;text-transform:uppercase}
+.topbar-right{display:flex;align-items:center;gap:14px}
+.tb-stat{font-size:11px;font-weight:600;letter-spacing:1.8px;text-transform:uppercase;color:var(--text2)}
+.tb-stat strong{color:var(--text);margin-right:4px;letter-spacing:0;text-transform:none}
+.theme-toggle{position:fixed;bottom:20px;right:20px;width:40px;height:40px;border-radius:50%;border:1px solid var(--border2);background:rgba(0,0,0,0.7);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:18px;transition:all .2s;z-index:100}
+.theme-toggle:hover{border-color:rgba(255,255,255,0.3);background:rgba(0,0,0,0.85);transform:scale(1.05)}
+
+/* ── PAGE ── */
+.dashboard{flex:1;padding:32px 24px 80px;max-width:1280px;width:100%;margin:0 auto}
+
+.page-header{margin-bottom:28px}
+.page-eyebrow{font-size:11px;font-weight:600;letter-spacing:1.8px;text-transform:uppercase;color:var(--red);margin-bottom:8px}
+.page-title{font-size:clamp(28px,4vw,38px);font-weight:800;letter-spacing:-0.02em;line-height:1.1;margin-bottom:6px}
+.page-sub{font-size:15px;color:var(--text2);line-height:1.5}
+
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:28px}
+.tab{padding:12px 18px;font-size:13px;font-weight:600;color:var(--text2);background:none;border:none;cursor:pointer;font-family:inherit;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--text);border-bottom-color:var(--red)}
+
+/* ── STATS GRID ── */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:32px}
+.stat{padding:18px 20px;border-radius:14px;border:1px solid var(--border);background:var(--surface);position:relative;overflow:hidden}
+.stat-label{font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text2);margin-bottom:10px}
+.stat-value{font-size:30px;font-weight:800;letter-spacing:-0.02em;line-height:1}
+.stat-trend{font-size:12px;color:var(--text3);margin-top:8px;display:flex;align-items:center;gap:5px}
+.stat-trend.up{color:var(--green)}
+.stat-trend.down{color:var(--red)}
+.stat.alert{border-color:rgba(218,41,28,0.25);background:rgba(218,41,28,0.04)}
+.stat.alert .stat-value{color:var(--red)}
+
+/* ── BREAKDOWN SECTION ── */
+.breakdown{margin-bottom:32px;padding:24px;border-radius:16px;border:1px solid var(--border);background:var(--surface)}
+.section-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:18px}
+.section-title{font-size:13px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text)}
+.section-meta{font-size:12px;color:var(--text3)}
+
+.bar-chart{display:flex;flex-direction:column;gap:14px}
+.bar-row{display:grid;grid-template-columns:160px 1fr 80px;gap:16px;align-items:center}
+.bar-domain{font-size:13px;font-weight:600;color:var(--text)}
+.bar-track{height:10px;border-radius:5px;background:rgba(255,255,255,0.04);display:flex;overflow:hidden}
+.bar-seg{height:100%;transition:width .3s}
+.bar-seg.red{background:var(--red)}
+.bar-seg.yellow{background:var(--orange)}
+.bar-seg.green{background:var(--green)}
+.bar-counts{display:flex;gap:8px;justify-content:flex-end;font-size:11px;font-weight:600;color:var(--text2)}
+.bar-count{display:flex;align-items:center;gap:4px}
+.dot{width:6px;height:6px;border-radius:50%}
+.dot.red{background:var(--red)}
+.dot.yellow{background:var(--orange)}
+.dot.green{background:var(--green)}
+
+.legend{display:flex;gap:18px;margin-top:18px;padding-top:16px;border-top:1px solid var(--border);font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text2)}
+.legend-item{display:flex;align-items:center;gap:6px}
+.legend-item .dot{width:8px;height:8px}
+
+/* ── LEAD TABLE ── */
+.leads{border-radius:16px;border:1px solid var(--border);background:var(--surface);overflow:hidden}
+.leads-head{display:flex;flex-direction:column;gap:14px;padding:20px 24px;border-bottom:1px solid var(--border)}
+.leads-head-top{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.leads-head-filters{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.bulk-actions{display:flex;gap:8px;flex-wrap:wrap}
+.btn-bulk{padding:8px 14px;border-radius:10px;border:1px solid var(--border2);background:transparent;color:var(--text);font-size:11px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;cursor:pointer;font-family:inherit;transition:all .15s;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn-bulk:hover{background:rgba(255,255,255,0.04);border-color:rgba(255,255,255,0.2)}
+.btn-bulk.primary{background:var(--red);border-color:var(--red);color:#fff}
+.btn-bulk.primary:hover{filter:brightness(1.08);background:var(--red);border-color:var(--red)}
+.leads-filters{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.filter-chip{padding:6px 12px;border-radius:14px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;cursor:pointer;font-family:inherit;transition:all .15s}
+.filter-chip:hover{color:var(--text);border-color:rgba(255,255,255,0.2)}
+.filter-chip.active{color:var(--text);border-color:var(--text2);background:rgba(255,255,255,0.04)}
+.filter-search{padding:7px 14px 7px 32px;border-radius:14px;border:1px solid var(--border2);background:rgba(255,255,255,0.02);color:var(--text);font-size:12px;font-family:inherit;outline:none;width:200px;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%2386868b'><path d='M11.7 10.3a6 6 0 1 0-1.4 1.4l3 3 1.4-1.4-3-3zM7 11a4 4 0 1 1 0-8 4 4 0 0 1 0 8z'/></svg>");background-repeat:no-repeat;background-position:10px center;background-size:14px;transition:all .15s}
+.filter-search:focus{border-color:rgba(218,41,28,0.5)}
+
+table{width:100%;border-collapse:collapse}
+thead th{text-align:left;padding:12px 16px;font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);border-bottom:1px solid var(--border);background:rgba(255,255,255,0.02);white-space:nowrap}
+tbody td{padding:14px 16px;font-size:13px;border-bottom:1px solid var(--border);vertical-align:middle}
+tbody tr:last-child td{border-bottom:none}
+tbody tr{transition:background .15s;cursor:pointer}
+tbody tr:hover{background:rgba(255,255,255,0.02)}
+tbody tr.priority{background:rgba(218,41,28,0.04)}
+tbody tr.priority:hover{background:rgba(218,41,28,0.07)}
+
+.email{font-weight:600;color:var(--text)}
+.email-sub{font-size:11px;color:var(--text3);margin-top:2px}
+.timestamp{font-size:12px;color:var(--text2);white-space:nowrap}
+.timestamp-sub{font-size:11px;color:var(--text3);margin-top:2px}
+
+.domain-cell{text-align:center}
+.domain-dot{display:inline-block;width:14px;height:14px;border-radius:50%;border:1px solid rgba(255,255,255,0.1)}
+.domain-dot.red{background:var(--red);border-color:var(--red)}
+.domain-dot.yellow{background:var(--orange);border-color:var(--orange)}
+.domain-dot.green{background:var(--green);border-color:var(--green)}
+
+.score{font-weight:700;font-size:14px;font-variant-numeric:tabular-nums}
+.score.high{color:var(--green)}
+.score.mid{color:var(--orange)}
+.score.low{color:var(--red)}
+
+.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:10px;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;white-space:nowrap}
+.badge.new{background:rgba(48,127,226,0.12);color:var(--blue)}
+.badge.contacted{background:rgba(255,185,0,0.12);color:var(--orange)}
+.badge.qualified{background:rgba(60,177,126,0.12);color:var(--green)}
+.badge.meeting{background:rgba(144,99,205,0.15);color:var(--purple)}
+.badge.closed{background:rgba(255,255,255,0.06);color:var(--text2)}
+
+.actions{display:flex;gap:6px;justify-content:flex-end}
+.icon-btn{width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;transition:all .15s}
+.icon-btn:hover{color:var(--text);border-color:var(--border2);background:rgba(255,255,255,0.04)}
+
+.table-foot{padding:14px 24px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border);background:rgba(255,255,255,0.02)}
+.foot-info{font-size:12px;color:var(--text3)}
+.foot-pager{display:flex;gap:6px}
+.pager-btn{padding:5px 11px;border-radius:8px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
+.pager-btn:hover{color:var(--text);border-color:rgba(255,255,255,0.2)}
+.pager-btn.active{color:var(--text);background:rgba(255,255,255,0.06);border-color:var(--border2)}
+
+/* ── LIGHT MODE ── */
+.light-mode{--bg:#f5f5f7;--surface:#ffffff;--surface2:#f5f5f7;--text:#1d1d1f;--text2:#6e6e73;--text3:#aeaeb2;--border:rgba(0,0,0,0.08);--border2:rgba(0,0,0,0.12)}
+.light-mode .topbar{background:rgba(255,255,255,0.88)}
+.light-mode .theme-toggle{background:rgba(255,255,255,0.8);border-color:rgba(0,0,0,0.12)}
+.light-mode .theme-toggle:hover{background:rgba(255,255,255,0.95);border-color:rgba(0,0,0,0.2)}
+.light-mode .stat.alert{background:rgba(218,41,28,0.05)}
+.light-mode .bar-track{background:rgba(0,0,0,0.05)}
+.light-mode .filter-chip:hover{border-color:rgba(0,0,0,0.2)}
+.light-mode .filter-chip.active{background:rgba(0,0,0,0.04)}
+.light-mode .btn-bulk:hover{background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.25)}
+.light-mode .filter-search{background-color:rgba(0,0,0,0.02)}
+.light-mode thead th{background:rgba(0,0,0,0.02)}
+.light-mode tbody tr:hover{background:rgba(0,0,0,0.02)}
+.light-mode tbody tr.priority{background:rgba(218,41,28,0.05)}
+.light-mode tbody tr.priority:hover{background:rgba(218,41,28,0.08)}
+.light-mode .table-foot{background:rgba(0,0,0,0.02)}
+.light-mode .icon-btn:hover{background:rgba(0,0,0,0.04)}
+
+@media(max-width:900px){
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .bar-row{grid-template-columns:120px 1fr 60px}
+  .leads-head{flex-direction:column;align-items:stretch;gap:12px}
+  .filter-search{width:100%}
+  table{font-size:12px}
+  thead th{padding:10px 10px}
+  tbody td{padding:12px 10px}
+  .actions{display:none}
+}
+@media(max-width:640px){
+  .dashboard{padding:20px 14px 60px}
+  .stats{grid-template-columns:1fr 1fr;gap:10px}
+  .stat-value{font-size:24px}
+  .bar-row{grid-template-columns:100px 1fr 50px;gap:10px}
+  .bar-domain{font-size:12px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <svg class="brand-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 487.6 55" aria-label="Fortinet"><path fill="currentColor" d="M279.9 11.7V0h13.4v54.8h-13.4V11.7zM220.9 0h51.7v11.8h-24.3v43.1H235V11.8h-14.1V0zm266.7 0v11.8h-24.3v43.1H450V11.8h-14.1V0h51.7zM0 0h58v11.8H13.4v11.7h38v11.8h-38v19.5H0V0zm374.5 0h54v11.8h-40.6v9.8h33.3v11.8h-33.3v9.8h41.3V55h-54.7V0zm-10.3 15.5v39.3h-13.4V15.5c0-2.1-1.6-3.7-3.7-3.7h-30v43.1h-13.4V0h45c8.5 0 15.5 7 15.5 15.5zM200.3 0h-45.7v54.8H168V35.3h30c1.6.1 2.9 1.4 2.9 3v16.6h13.4V38.1c0-2.9-1.6-5.4-4-6.8 2.9-2.7 4.7-6.6 4.7-10.8v-5.8c.1-8.1-6.5-14.7-14.7-14.7zm1.4 20.5c0 1.6-1.3 3-3 3H168V11.8h30.7c1.6 0 3 1.3 3 3v5.7z"/><path fill="#da291c" d="M144.2 20.4v14.2H122V20.4h22.2zM93.9 54.8H116V40.6H93.9v14.2zm50.3-42.9c0-6.6-5.3-11.9-11.9-11.9h-10.2v14.2h22.1v-2.3zM93.9 0v14.2H116V0H93.9zM65.7 20.4v14.2h22.1V20.4H65.7zM122 54.8h10.2c6.6 0 11.9-5.3 11.9-11.9v-2.3H122v14.2zM65.7 42.9c0 6.6 5.3 11.9 11.9 11.9h10.2V40.6H65.7v2.3zm0-31v2.3h22.1V0H77.6C71 0 65.7 5.3 65.7 11.9z"/></svg>
+      <div class="brand-sep"></div>
+      <div class="topbar-title">Admin — Lead Dashboard</div>
+    </div>
+    <div class="topbar-right">
+      <div class="tb-stat"><strong>aws-summit-2026</strong></div>
+    </div>
+  </div>
+
+  <main class="dashboard">
+
+    <!-- HEADER -->
+    <div class="page-header">
+      <div class="page-eyebrow">AWS Summit 2026 · Booth N42</div>
+      <h1 class="page-title">Lead Dashboard</h1>
+      <p class="page-sub">47 prospects walked through the assessment. Triage the at-risk ones and book the follow-ups before the team flies home.</p>
+    </div>
+
+    <!-- TABS -->
+    <div class="tabs">
+      <button class="tab active">Overview</button>
+      <button class="tab">All Leads</button>
+      <button class="tab">By Domain</button>
+      <button class="tab">Exports</button>
+    </div>
+
+    <!-- STATS -->
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-label">Total Submissions</div>
+        <div class="stat-value">47</div>
+        <div class="stat-trend up">▲ 12 since yesterday</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Avg Posture</div>
+        <div class="stat-value">62%</div>
+        <div class="stat-trend">— Mixed across cohort</div>
+      </div>
+      <div class="stat alert">
+        <div class="stat-label">High Priority</div>
+        <div class="stat-value">8</div>
+        <div class="stat-trend">3+ red domains</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Meetings Booked</div>
+        <div class="stat-value">5</div>
+        <div class="stat-trend up">▲ 2 today</div>
+      </div>
+    </div>
+
+    <!-- BREAKDOWN -->
+    <section class="breakdown">
+      <div class="section-head">
+        <div class="section-title">Posture by Domain · 47 responses</div>
+        <div class="section-meta">Updated 2 min ago</div>
+      </div>
+      <div class="bar-chart">
+        <div class="bar-row">
+          <div class="bar-domain">Network Security</div>
+          <div class="bar-track">
+            <div class="bar-seg green" style="width:38%"></div>
+            <div class="bar-seg yellow" style="width:36%"></div>
+            <div class="bar-seg red" style="width:26%"></div>
+          </div>
+          <div class="bar-counts">
+            <span class="bar-count"><span class="dot green"></span>18</span>
+            <span class="bar-count"><span class="dot yellow"></span>17</span>
+            <span class="bar-count"><span class="dot red"></span>12</span>
+          </div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-domain">Application Security</div>
+          <div class="bar-track">
+            <div class="bar-seg green" style="width:28%"></div>
+            <div class="bar-seg yellow" style="width:34%"></div>
+            <div class="bar-seg red" style="width:38%"></div>
+          </div>
+          <div class="bar-counts">
+            <span class="bar-count"><span class="dot green"></span>13</span>
+            <span class="bar-count"><span class="dot yellow"></span>16</span>
+            <span class="bar-count"><span class="dot red"></span>18</span>
+          </div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-domain">Cloud Visibility</div>
+          <div class="bar-track">
+            <div class="bar-seg green" style="width:21%"></div>
+            <div class="bar-seg yellow" style="width:36%"></div>
+            <div class="bar-seg red" style="width:43%"></div>
+          </div>
+          <div class="bar-counts">
+            <span class="bar-count"><span class="dot green"></span>10</span>
+            <span class="bar-count"><span class="dot yellow"></span>17</span>
+            <span class="bar-count"><span class="dot red"></span>20</span>
+          </div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-domain">Service Visibility</div>
+          <div class="bar-track">
+            <div class="bar-seg green" style="width:17%"></div>
+            <div class="bar-seg yellow" style="width:34%"></div>
+            <div class="bar-seg red" style="width:49%"></div>
+          </div>
+          <div class="bar-counts">
+            <span class="bar-count"><span class="dot green"></span>8</span>
+            <span class="bar-count"><span class="dot yellow"></span>16</span>
+            <span class="bar-count"><span class="dot red"></span>23</span>
+          </div>
+        </div>
+      </div>
+      <div class="legend">
+        <div class="legend-item"><span class="dot green"></span>Strong</div>
+        <div class="legend-item"><span class="dot yellow"></span>Partial</div>
+        <div class="legend-item"><span class="dot red"></span>At Risk</div>
+      </div>
+    </section>
+
+    <!-- LEADS TABLE -->
+    <section class="leads">
+      <div class="leads-head">
+        <div class="leads-head-top">
+          <div class="section-title">Recent Leads · 47 total</div>
+          <div class="bulk-actions">
+            <button class="btn-bulk">📤 Export CSV</button>
+            <button class="btn-bulk">📅 Schedule Meeting</button>
+            <button class="btn-bulk">✉️ Send Follow-up</button>
+            <button class="btn-bulk primary">🎥 Invite to Webinar</button>
+          </div>
+        </div>
+        <div class="leads-head-filters">
+          <div class="leads-filters">
+            <button class="filter-chip active">All</button>
+            <button class="filter-chip">New</button>
+            <button class="filter-chip">Contacted</button>
+            <button class="filter-chip">Qualified</button>
+            <button class="filter-chip">High Priority</button>
+          </div>
+          <input class="filter-search" placeholder="Search email or company">
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Email</th>
+            <th>Submitted</th>
+            <th>Network</th>
+            <th>App</th>
+            <th>Cloud</th>
+            <th>Service</th>
+            <th>Score</th>
+            <th>Status</th>
+            <th style="text-align:right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="priority">
+            <td>
+              <div class="email">sarah.chen@meridian-capital.com</div>
+              <div class="email-sub">Meridian Capital · CISO</div>
+            </td>
+            <td>
+              <div class="timestamp">10:42 AM</div>
+              <div class="timestamp-sub">Today</div>
+            </td>
+            <td class="domain-cell"><span class="domain-dot red" title="At Risk"></span></td>
+            <td class="domain-cell"><span class="domain-dot red"></span></td>
+            <td class="domain-cell"><span class="domain-dot red"></span></td>
+            <td class="domain-cell"><span class="domain-dot yellow"></span></td>
+            <td><span class="score low">13%</span></td>
+            <td><span class="badge new">New</span></td>
+            <td class="actions">
+              <button class="icon-btn" title="Schedule meeting">📅</button>
+              <button class="icon-btn" title="Send email">✉️</button>
+              <button class="icon-btn" title="Open lead">↗</button>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <div class="email">m.johnson@globex.io</div>
+              <div class="email-sub">Globex · Director, Cloud Eng</div>
+            </td>
+            <td>
+              <div class="timestamp">10:31 AM</div>
+              <div class="timestamp-sub">Today</div>
+            </td>
+            <td class="domain-cell"><span class="domain-dot green"></span></td>
+            <td class="domain-cell"><span class="domain-dot yellow"></span></td>
+            <td class="domain-cell"><span class="domain-dot yellow"></span></td>
+            <td class="domain-cell"><span class="domain-dot green"></span></td>
+            <td><span class="score mid">75%</span></td>
+            <td><span class="badge contacted">Contacted</span></td>
+            <td class="actions">
+              <button class="icon-btn" title="Schedule meeting">📅</button>
+              <button class="icon-btn" title="Send email">✉️</button>
+              <button class="icon-btn" title="Open lead">↗</button>
+            </td>
+          </tr>
+          <tr class="priority">
+            <td>
+              <div class="email">david.r@northwind.com</div>
+              <div class="email-sub">Northwind Logistics · VP Engineering</div>
+            </td>
+            <td>
+              <div class="timestamp">10:18 AM</div>
+              <div class="timestamp-sub">Today</div>
+            </td>
+            <td class="domain-cell"><span class="domain-dot yellow"></span></td>
+            <td class="domain-cell"><span class="domain-dot red"></span></td>
+            <td class="domain-cell"><span class="domain-dot red"></span></td>
+            <td class="domain-cell"><span class="domain-dot red"></span></td>
+            <td><span class="score low">25%</span></td>
+            <td><span class="badge new">New</span></td>
+            <td class="actions">
+              <button class="icon-btn" title="Schedule meeting">📅</button>
+              <button class="icon-btn" title="Send email">✉️</button>
+              <button class="icon-btn" title="Open lead">↗</button>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <div class="email">jordan.lee@stark-industries.com</div>
+              <div class="email-sub">Stark Industries · Security Lead</div>
+            </td>
+            <td>
+              <div class="timestamp">10:05 AM</div>
+              <div class="timestamp-sub">Today</div>
+            </td>
+            <td class="domain-cell"><span class="domain-dot green"></span></td>
+            <td class="domain-cell"><span class="domain-dot green"></span></td>
+            <td class="domain-cell"><span class="domain-dot yellow"></span></td>
+            <td class="domain-cell"><span class="domain-dot yellow"></span></td>
+            <td><span class="score high">75%</span></td>
+            <td><span class="badge qualified">Qualified</span></td>
+            <td class="actions">
+              <button class="icon-btn" title="Schedule meeting">📅</button>
+              <button class="icon-btn" title="Send email">✉️</button>
+              <button class="icon-btn" title="Open lead">↗</button>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <div class="email">p.bautista@helix-bio.io</div>
+              <div class="email-sub">Helix Bio · Head of IT</div>
+            </td>
+            <td>
+              <div class="timestamp">09:48 AM</div>
+              <div class="timestamp-sub">Today</div>
+            </td>
+            <td class="domain-cell"><span class="domain-dot yellow"></span></td>
+            <td class="domain-cell"><span class="domain-dot green"></span></td>
+            <td class="domain-cell"><span class="domain-dot yellow"></span></td>
+            <td class="domain-cell"><span class="domain-dot red"></span></td>
+            <td><span class="score mid">50%</span></td>
+            <td><span class="badge meeting">Meeting</span></td>
+            <td class="actions">
+              <button class="icon-btn" title="Schedule meeting">📅</button>
+              <button class="icon-btn" title="Send email">✉️</button>
+              <button class="icon-btn" title="Open lead">↗</button>
+            </td>
+          </tr>
+          <tr class="priority">
+            <td>
+              <div class="email">tony.f@cascade-energy.com</div>
+              <div class="email-sub">Cascade Energy · Cloud Architect</div>
+            </td>
+            <td>
+              <div class="timestamp">09:32 AM</div>
+              <div class="timestamp-sub">Today</div>
+            </td>
+            <td class="domain-cell"><span class="domain-dot red"></span></td>
+            <td class="domain-cell"><span class="domain-dot yellow"></span></td>
+            <td class="domain-cell"><span class="domain-dot red"></span></td>
+            <td class="domain-cell"><span class="domain-dot red"></span></td>
+            <td><span class="score low">13%</span></td>
+            <td><span class="badge new">New</span></td>
+            <td class="actions">
+              <button class="icon-btn" title="Schedule meeting">📅</button>
+              <button class="icon-btn" title="Send email">✉️</button>
+              <button class="icon-btn" title="Open lead">↗</button>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <div class="email">aisha.patel@coral-reef.dev</div>
+              <div class="email-sub">Coral Reef Dev · DevSecOps</div>
+            </td>
+            <td>
+              <div class="timestamp">09:14 AM</div>
+              <div class="timestamp-sub">Today</div>
+            </td>
+            <td class="domain-cell"><span class="domain-dot green"></span></td>
+            <td class="domain-cell"><span class="domain-dot green"></span></td>
+            <td class="domain-cell"><span class="domain-dot green"></span></td>
+            <td class="domain-cell"><span class="domain-dot yellow"></span></td>
+            <td><span class="score high">88%</span></td>
+            <td><span class="badge qualified">Qualified</span></td>
+            <td class="actions">
+              <button class="icon-btn" title="Schedule meeting">📅</button>
+              <button class="icon-btn" title="Send email">✉️</button>
+              <button class="icon-btn" title="Open lead">↗</button>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <div class="email">k.nakamura@bluepeak.ai</div>
+              <div class="email-sub">BluePeak AI · Platform Lead</div>
+            </td>
+            <td>
+              <div class="timestamp">5:51 PM</div>
+              <div class="timestamp-sub">Yesterday</div>
+            </td>
+            <td class="domain-cell"><span class="domain-dot yellow"></span></td>
+            <td class="domain-cell"><span class="domain-dot yellow"></span></td>
+            <td class="domain-cell"><span class="domain-dot red"></span></td>
+            <td class="domain-cell"><span class="domain-dot yellow"></span></td>
+            <td><span class="score mid">38%</span></td>
+            <td><span class="badge contacted">Contacted</span></td>
+            <td class="actions">
+              <button class="icon-btn" title="Schedule meeting">📅</button>
+              <button class="icon-btn" title="Send email">✉️</button>
+              <button class="icon-btn" title="Open lead">↗</button>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <div class="email">mira.solis@vanguard-retail.com</div>
+              <div class="email-sub">Vanguard Retail · IT Manager</div>
+            </td>
+            <td>
+              <div class="timestamp">4:38 PM</div>
+              <div class="timestamp-sub">Yesterday</div>
+            </td>
+            <td class="domain-cell"><span class="domain-dot green"></span></td>
+            <td class="domain-cell"><span class="domain-dot yellow"></span></td>
+            <td class="domain-cell"><span class="domain-dot yellow"></span></td>
+            <td class="domain-cell"><span class="domain-dot green"></span></td>
+            <td><span class="score mid">75%</span></td>
+            <td><span class="badge meeting">Meeting</span></td>
+            <td class="actions">
+              <button class="icon-btn" title="Schedule meeting">📅</button>
+              <button class="icon-btn" title="Send email">✉️</button>
+              <button class="icon-btn" title="Open lead">↗</button>
+            </td>
+          </tr>
+          <tr class="priority">
+            <td>
+              <div class="email">chris.bell@kestrel-financial.com</div>
+              <div class="email-sub">Kestrel Financial · CISO</div>
+            </td>
+            <td>
+              <div class="timestamp">3:22 PM</div>
+              <div class="timestamp-sub">Yesterday</div>
+            </td>
+            <td class="domain-cell"><span class="domain-dot red"></span></td>
+            <td class="domain-cell"><span class="domain-dot red"></span></td>
+            <td class="domain-cell"><span class="domain-dot yellow"></span></td>
+            <td class="domain-cell"><span class="domain-dot red"></span></td>
+            <td><span class="score low">13%</span></td>
+            <td><span class="badge contacted">Contacted</span></td>
+            <td class="actions">
+              <button class="icon-btn" title="Schedule meeting">📅</button>
+              <button class="icon-btn" title="Send email">✉️</button>
+              <button class="icon-btn" title="Open lead">↗</button>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <div class="email">leo.tanaka@silvercrest.io</div>
+              <div class="email-sub">Silvercrest · Cloud Eng</div>
+            </td>
+            <td>
+              <div class="timestamp">2:47 PM</div>
+              <div class="timestamp-sub">Yesterday</div>
+            </td>
+            <td class="domain-cell"><span class="domain-dot yellow"></span></td>
+            <td class="domain-cell"><span class="domain-dot green"></span></td>
+            <td class="domain-cell"><span class="domain-dot red"></span></td>
+            <td class="domain-cell"><span class="domain-dot yellow"></span></td>
+            <td><span class="score mid">50%</span></td>
+            <td><span class="badge new">New</span></td>
+            <td class="actions">
+              <button class="icon-btn" title="Schedule meeting">📅</button>
+              <button class="icon-btn" title="Send email">✉️</button>
+              <button class="icon-btn" title="Open lead">↗</button>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <div class="email">renata.king@avalon-health.org</div>
+              <div class="email-sub">Avalon Health · Compliance</div>
+            </td>
+            <td>
+              <div class="timestamp">1:15 PM</div>
+              <div class="timestamp-sub">Yesterday</div>
+            </td>
+            <td class="domain-cell"><span class="domain-dot green"></span></td>
+            <td class="domain-cell"><span class="domain-dot yellow"></span></td>
+            <td class="domain-cell"><span class="domain-dot yellow"></span></td>
+            <td class="domain-cell"><span class="domain-dot yellow"></span></td>
+            <td><span class="score mid">63%</span></td>
+            <td><span class="badge closed">Closed-Lost</span></td>
+            <td class="actions">
+              <button class="icon-btn" title="Schedule meeting">📅</button>
+              <button class="icon-btn" title="Send email">✉️</button>
+              <button class="icon-btn" title="Open lead">↗</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="table-foot">
+        <div class="foot-info">Showing 12 of 47 leads</div>
+        <div class="foot-pager">
+          <button class="pager-btn">←</button>
+          <button class="pager-btn active">1</button>
+          <button class="pager-btn">2</button>
+          <button class="pager-btn">3</button>
+          <button class="pager-btn">4</button>
+          <button class="pager-btn">→</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="theme-toggle" onclick="toggleTheme()">☀️</div>
+
+<script>
+function toggleTheme(){
+  const l=document.documentElement.classList.toggle('light-mode');
+  document.querySelectorAll('.theme-toggle').forEach(e=>e.textContent=l?'🌙':'☀️');
+}
+</script>
+</body>
+</html>
