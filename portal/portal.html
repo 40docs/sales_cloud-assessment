@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Assessment Admin · Mint event token</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#000;--text:#f5f5f7;--text2:#86868b;--text3:#48484a;--red:#DA291C;--green:#3CB17E}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:28px 32px;-webkit-font-smoothing:antialiased}
+.bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:28px;max-width:1100px;margin-left:auto;margin-right:auto}
+.brand{font-size:11px;font-weight:600;letter-spacing:1.8px;text-transform:uppercase;color:var(--text3)}
+.logout{font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text2);background:none;border:1px solid rgba(255,255,255,0.12);padding:8px 14px;border-radius:18px;cursor:pointer;font-family:inherit}
+.logout:hover{color:var(--text);border-color:rgba(255,255,255,0.3)}
+.wrap{display:grid;grid-template-columns:1fr 1fr;gap:32px;max-width:1100px;margin:0 auto}
+@media(max-width:900px){.wrap{grid-template-columns:1fr}}
+.title{font-size:24px;font-weight:700;margin-bottom:6px;letter-spacing:-0.01em}
+.sub{font-size:13px;color:var(--text2);margin-bottom:22px;line-height:1.55}
+form{display:flex;flex-direction:column;gap:14px}
+label{font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;display:block}
+input{width:100%;padding:12px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:var(--text);font-size:14px;font-family:inherit;outline:none}
+input:focus{border-color:rgba(218,41,28,0.5)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+button.primary{padding:14px;border-radius:12px;background:var(--red);color:#fff;font-size:13px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;border:none;cursor:pointer;font-family:inherit;margin-top:6px}
+button.primary:hover{filter:brightness(1.08)}
+.result{padding:22px;border:1px solid rgba(255,255,255,0.08);border-radius:16px;background:rgba(255,255,255,0.02);text-align:center}
+.qr{width:240px;height:240px;border-radius:12px;background:#fff;padding:12px;margin:14px auto;display:block}
+.url{font-size:12px;color:var(--text2);word-break:break-all;padding:12px;border:1px solid rgba(255,255,255,0.08);border-radius:10px;background:rgba(255,255,255,0.03);margin-top:12px;line-height:1.45;text-align:left}
+.actions{display:flex;gap:10px;justify-content:center;margin-top:14px;align-items:center}
+.actions button,.actions a button{padding:9px 16px;font-size:11px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;border:1px solid rgba(255,255,255,0.12);background:none;color:var(--text);border-radius:18px;cursor:pointer;font-family:inherit}
+.actions button:hover,.actions a button:hover{border-color:rgba(255,255,255,0.3)}
+.ok{color:var(--green);font-size:12px;margin-top:8px;min-height:14px;font-weight:600}
+.placeholder{color:var(--text3);font-size:13px;padding:64px 32px;text-align:center;border:1px dashed rgba(255,255,255,0.08);border-radius:16px}
+.event-meta{font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:8px}
+.event-name{font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px}
+</style>
+</head>
+<body>
+<div class="bar">
+  <div class="brand">Sales Cloud Assessment · Admin</div>
+  <form method="POST" action="/admin/logout" style="margin:0"><button class="logout" type="submit">Sign out</button></form>
+</div>
+<div class="wrap">
+  <div>
+    <div class="title">Mint event token</div>
+    <div class="sub">Generates a per-event signed link valid between the start and end times. Encode the returned URL into a QR for the booth — the same token can be scanned by multiple attendees within the window.</div>
+    <form id="mintForm">
+      <div><label>Event ID</label><input name="event_id" placeholder="aws-summit-mtl-2026" required></div>
+      <div><label>Event name</label><input name="event_name" placeholder="AWS Summit Montréal 2026"></div>
+      <div><label>Presenter ID (optional)</label><input name="presenter_id" placeholder="ajammes"></div>
+      <div class="row">
+        <div><label>Starts</label><input type="datetime-local" name="nbf" required></div>
+        <div><label>Ends</label><input type="datetime-local" name="exp" required></div>
+      </div>
+      <div><label>Max scans (optional)</label><input type="number" name="max_uses" min="0" placeholder="0 = unlimited within window"></div>
+      <button class="primary" type="submit">Mint &amp; show QR</button>
+    </form>
+  </div>
+  <div>
+    <div id="placeholder" class="placeholder">Mint a token to see the QR and shareable URL.</div>
+    <div id="result" class="result" hidden>
+      <div class="event-meta">Event token</div>
+      <div class="event-name" id="evName"></div>
+      <img id="qr" class="qr" alt="event QR code">
+      <div class="url" id="url"></div>
+      <div class="actions">
+        <button type="button" onclick="copyUrl()">Copy URL</button>
+        <a id="download" download="event-qr.png"><button type="button">Download QR</button></a>
+      </div>
+      <div class="ok" id="ok"></div>
+    </div>
+  </div>
+</div>
+<script>
+document.getElementById('mintForm').addEventListener('submit', async function(e){
+  e.preventDefault();
+  const f=new FormData(e.target);
+  const toIso=v=>v?new Date(v).toISOString():'';
+  const payload={
+    event_id:(f.get('event_id')||'').trim(),
+    event_name:(f.get('event_name')||'').trim(),
+    presenter_id:(f.get('presenter_id')||'').trim(),
+    nbf:toIso(f.get('nbf')),
+    exp:toIso(f.get('exp')),
+    max_uses:Number(f.get('max_uses')||0)
+  };
+  const r=await fetch('/admin/mint',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),credentials:'same-origin'});
+  if(!r.ok){alert('Mint failed: '+r.status+' '+await r.text());return;}
+  const data=await r.json();
+  const url=data.url||data.token;
+  document.getElementById('evName').textContent=payload.event_name||payload.event_id;
+  document.getElementById('url').textContent=url;
+  const qrSrc='/admin/qr?data='+encodeURIComponent(url);
+  document.getElementById('qr').src=qrSrc;
+  document.getElementById('download').href=qrSrc;
+  document.getElementById('result').hidden=false;
+  document.getElementById('placeholder').hidden=true;
+});
+async function copyUrl(){
+  const txt=document.getElementById('url').textContent;
+  try{await navigator.clipboard.writeText(txt);showOk('Copied');}catch(e){showOk('Select to copy');}
+}
+function showOk(m){const o=document.getElementById('ok');o.textContent=m;setTimeout(()=>{o.textContent='';},1800);}
+</script>
+</body>
+</html>

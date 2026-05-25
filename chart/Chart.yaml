@@ -1,0 +1,6 @@
+apiVersion: v2
+name: assessment
+description: Sales cloud assessment — QR-token gated, admin-minted, telemetry-collecting
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

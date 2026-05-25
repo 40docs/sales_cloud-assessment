@@ -1,0 +1,27 @@
+{{- if .Values.postgres.cnpg.enabled }}
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ include "assessment.fullname" . }}-pg
+  labels: {{- include "assessment.labels" . | nindent 4 }}
+spec:
+  instances: {{ .Values.postgres.cnpg.instances }}
+  storage:
+    size: {{ .Values.postgres.cnpg.storage.size }}
+    {{- with .Values.postgres.cnpg.storage.storageClass }}
+    storageClass: {{ . | quote }}
+    {{- end }}
+  bootstrap:
+    initdb:
+      database: assessment
+      owner: assessment
+{{- else if .Values.postgres.externalUrl }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "assessment.fullname" . }}-external-db
+  labels: {{- include "assessment.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  uri: {{ .Values.postgres.externalUrl | quote }}
+{{- end }}
