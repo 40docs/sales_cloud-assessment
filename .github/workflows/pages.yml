@@ -23,19 +23,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create index redirect
+      - name: Stage mockup-only artifact
         run: |
-          cat > index.html << 'EOF'
+          mkdir -p dist
+          cp security-maturity-assessment.html         dist/
+          cp security-maturity-assessment-browser.html dist/
+          cp security-maturity-assessment-mobile.html  dist/
+          cp -r admin                                  dist/
+          cat > dist/index.html << 'HTML'
           <!DOCTYPE html>
           <html>
           <head><meta http-equiv="refresh" content="0; url=security-maturity-assessment.html"></head>
           <body></body>
           </html>
-          EOF
+          HTML
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: .
-      - uses: actions/deploy-pages@v4
-        id: deployment
+          path: dist
+      - id: deployment
+        uses: actions/deploy-pages@v4
