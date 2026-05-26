@@ -1,0 +1,115 @@
+---
+name: "Containerize and Deploy"
+
+# Builds the static assessment site into an nginx image, pushes it to GHCR,
+# and bumps the image tag in amerintlxperts/dev-infrastructure-2026 so ArgoCD
+# rolls it out at https://assessment.amerintlxperts.com.
+#
+# This runs ALONGSIDE pages.yml — the site still publishes to GitHub Pages.
+
+on:
+  push:
+    branches:
+      - "main"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and Push Container
+    runs-on: ubuntu-latest
+    outputs:
+      short_sha: ${{ steps.vars.outputs.short_sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Mirror pages.yml: generate the entry index.html that redirects to the
+      # device-detect router (do not commit a hand-written index.html).
+      - name: Create index redirect
+        run: |
+          cat > index.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head><meta http-equiv="refresh" content="0; url=security-maturity-assessment.html"></head>
+          <body></body>
+          </html>
+          EOF
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set variables
+        id: vars
+        run: |
+          echo "short_sha=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+
+      - name: Create Dockerfile
+        run: |
+          printf '%s\n' \
+            'FROM ghcr.io/nginxinc/nginx-unprivileged:latest' \
+            'COPY index.html security-maturity-assessment.html security-maturity-assessment-browser.html security-maturity-assessment-mobile.html /usr/share/nginx/html/' \
+            'COPY admin /usr/share/nginx/html/admin/' \
+            'USER root' \
+            'RUN mkdir -p /usr/share/nginx/html/healthz && echo "OK" > /usr/share/nginx/html/healthz/index.html' \
+            'USER 101' \
+            > Dockerfile
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/sales_cloud-assessment:${{ steps.vars.outputs.short_sha }}
+            ghcr.io/${{ github.repository_owner }}/sales_cloud-assessment:latest
+
+  update-manifests:
+    name: Update Kubernetes Manifests
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout manifests repo
+        uses: actions/checkout@v4
+        with:
+          repository: amerintlxperts/dev-infrastructure-2026
+          token: ${{ secrets.PAT }}
+          path: manifests
+
+      - name: Update deployment image tag
+        run: |
+          cd manifests
+          yq -i '.spec.template.spec.containers[0].image = "ghcr.io/40docs/sales_cloud-assessment:${{ needs.build.outputs.short_sha }}"' \
+            manifests-apps/overlays/xperts/assessment/deployment.yaml
+
+      - name: Commit and push
+        working-directory: manifests
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git diff --staged --quiet && exit 0
+          git commit -m "chore: update sales_cloud-assessment to ${{ needs.build.outputs.short_sha }}"
+
+          # Retry push with pull/rebase on failure (up to 5 attempts)
+          for i in {1..5}; do
+            git push && exit 0
+            echo "Push failed, pulling and retrying ($i/5)..."
+            git pull --rebase
+            sleep $((i * 2))
+          done
+          exit 1
