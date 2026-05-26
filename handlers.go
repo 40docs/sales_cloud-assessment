@@ -28,6 +28,7 @@ const (
 )
 
 var (
+	cookieSecure  = envOr("COOKIE_SECURE", "true") != "false"
 	loginLimiter  = newLimiter(5, time.Minute)
 	eventCounters = &sessionCounter{m: map[string]int{}}
 
@@ -146,7 +147,7 @@ func serveDeck(w http.ResponseWriter, r *http.Request) {
 		}
 		http.SetCookie(w, &http.Cookie{
 			Name: sessCookieName, Value: tok, Path: "/",
-			Expires: exp, HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode,
+			Expires: exp, HttpOnly: true, Secure: cookieSecure, SameSite: http.SameSiteLaxMode,
 		})
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
@@ -357,7 +358,7 @@ func adminLogin(w http.ResponseWriter, r *http.Request) {
 		}
 		http.SetCookie(w, &http.Cookie{
 			Name: adminCookieName, Value: tok, Path: "/admin",
-			Expires: exp, HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode,
+			Expires: exp, HttpOnly: true, Secure: cookieSecure, SameSite: http.SameSiteStrictMode,
 		})
 		log.Printf("admin login OK ip=%s", ip)
 		http.Redirect(w, r, "/admin", http.StatusFound)
@@ -373,7 +374,7 @@ func adminLogout(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name: adminCookieName, Value: "", Path: "/admin",
-		MaxAge: -1, HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode,
+		MaxAge: -1, HttpOnly: true, Secure: cookieSecure, SameSite: http.SameSiteStrictMode,
 	})
 	http.Redirect(w, r, "/admin/login", http.StatusFound)
 }

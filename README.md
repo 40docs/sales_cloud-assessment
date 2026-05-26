@@ -102,3 +102,52 @@ needs the telemetry `<script>` block at the bottom — if you regenerate the
 HTML from scratch, re-add that block (see git history for the snippet).
 
 CLAUDE.md has the editorial conventions for the assessment content.
+
+## Local dev with Docker
+
+End-to-end test of the container (server + Postgres + telemetry + admin
+portal) from one machine. No k8s, no TLS, no real DNS.
+
+```bash
+git checkout containerize
+echo "JWT_PRIVATE_KEY=$(openssl rand -base64 32)" > .env
+docker compose up --build
+```
+
+In another terminal:
+
+```bash
+# Mint a token via the CLI bearer path
+curl -s -X POST http://localhost:8080/admin/mint \
+  -H "Authorization: Bearer localdev-cli-token" \
+  -H "Content-Type: application/json" \
+  -d '{"event_id":"local-test","exp":"2026-12-31T00:00:00Z"}'
+# → {"token":"...","url":"http://localhost:8080/?t=..."}
+
+# Open the returned url in a browser. Walk the assessment. Submit your email.
+
+# Confirm telemetry landed in Postgres
+docker compose exec postgres psql -U assessment -d assessment -c \
+  "SELECT phase, scenario, dwell_ms FROM phase_events ORDER BY entered_at DESC LIMIT 10;"
+
+docker compose exec postgres psql -U assessment -d assessment -c \
+  "SELECT scenario, outcome_idx, score, color FROM picks ORDER BY picked_at DESC LIMIT 10;"
+
+docker compose exec postgres psql -U assessment -d assessment -c \
+  "SELECT email, submitted_at FROM submissions ORDER BY submitted_at DESC LIMIT 10;"
+```
+
+Alternative: skip curl and use the browser portal at
+`http://localhost:8080/admin` — password `localdev`.
+
+### Tear down
+
+```bash
+docker compose down -v       # -v drops the Postgres volume
+```
+
+### Important
+
+`COOKIE_SECURE=false` is set in `compose.yaml` so cookies travel over plain
+http. **Never set this in production** — the Helm chart does not expose this
+knob, so prod always issues `Secure` cookies.
