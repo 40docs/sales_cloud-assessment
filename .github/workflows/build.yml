@@ -25,8 +25,6 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    outputs:
-      image_tag: ${{ steps.meta.outputs.version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -86,7 +84,8 @@ jobs:
       - name: Bump assessment image tag (Helm value)
         run: |
           cd manifests
-          yq -i '.spec.source.helm.valuesObject.image.tag = "${{ needs.build.outputs.image_tag }}"' \
+          TAG="${GITHUB_SHA::7}"   # matches the type=sha,prefix= image tag (metadata-action 'version' resolves to the branch name, not the sha)
+          yq -i ".spec.source.helm.valuesObject.image.tag = \"$TAG\"" \
             manifests-platform/resources/assessment/application.yaml
 
       - name: Commit and push
@@ -96,7 +95,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .
           git diff --staged --quiet && exit 0
-          git commit -m "chore: update assessment to ${{ needs.build.outputs.image_tag }}"
+          git commit -m "chore: update assessment to ${GITHUB_SHA::7}"
           for i in {1..5}; do
             git push && exit 0
             echo "Push failed, pulling and retrying ($i/5)..."
