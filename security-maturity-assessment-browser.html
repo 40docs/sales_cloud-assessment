@@ -511,5 +511,59 @@ function restart(){
 
 updatePips();
 </script>
+<script>
+/* Container telemetry — no-ops on Pages preview (no /api/event). */
+(function(){
+  if(typeof window.goTo!=='function')return;
+  function post(p){
+    try{
+      var body=JSON.stringify(p);
+      if(navigator.sendBeacon){
+        navigator.sendBeacon('/api/event', new Blob([body],{type:'application/json'}));
+      }else{
+        fetch('/api/event',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:body,keepalive:true}).catch(function(){});
+      }
+    }catch(e){}
+  }
+  var lastEnter = Date.now();
+  var origGoTo = window.goTo;
+  window.goTo = function(id){
+    var now = Date.now();
+    var payload = {event:'phase_enter', phase:id, dwell_ms:now-lastEnter};
+    try {
+      if (id === 'sceneScenario' && typeof current === 'number' &&
+          Array.isArray(scenarios) && scenarios[current]) {
+        payload.scenario = scenarios[current].id;
+      }
+    } catch(e){}
+    post(payload);
+    lastEnter = now;
+    return origGoTo(id);
+  };
+  if (typeof window.pick === 'function') {
+    var origPick = window.pick;
+    window.pick = function(idx){
+      try {
+        var s = scenarios[current], o = s.outcomes[idx];
+        post({event:'pick', scenario:s.id, outcome_idx:idx, score:o.score, color:o.color});
+      } catch(e){}
+      return origPick(idx);
+    };
+  }
+  if (typeof window.sendReport === 'function') {
+    var origSendReport = window.sendReport;
+    window.sendReport = function(){
+      try {
+        if (typeof userEmail === 'string' && userEmail) {
+          post({event:'submit', email:userEmail, scores:scores});
+        }
+      } catch(e){}
+      return origSendReport();
+    };
+  }
+  setTimeout(function(){post({event:'phase_enter', phase:'sceneIntro', dwell_ms:0});},0);
+  window.addEventListener('pagehide', function(){ post({event:'session_end'}); });
+})();
+</script>
 </body>
 </html>

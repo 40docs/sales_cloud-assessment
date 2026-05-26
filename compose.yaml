@@ -1,0 +1,46 @@
+# Local end-to-end test: Postgres + the app built from the local Containerfile.
+#
+#   echo "JWT_PRIVATE_KEY=$(openssl rand -base64 32)" > .env
+#   docker compose up --build
+#
+# COOKIE_SECURE=false is set so the session/admin cookies travel over plain
+# http://localhost. Do NOT set this in production — the Helm chart does not
+# expose this knob, so prod always gets Secure cookies.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: assessment
+      POSTGRES_PASSWORD: assessment
+      POSTGRES_DB: assessment
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U assessment -d assessment"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Containerfile
+    environment:
+      DATABASE_URL: postgres://assessment:assessment@postgres:5432/assessment?sslmode=disable
+      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-localdev}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-localdev-cli-token}
+      IP_SALT: ${IP_SALT:-localdev-salt}
+      PUBLIC_URL: http://localhost:8080
+      COOKIE_SECURE: "false"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
