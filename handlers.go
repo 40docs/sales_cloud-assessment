@@ -850,7 +850,11 @@ func adminLeadsHandler(w http.ResponseWriter, r *http.Request) {
 
 	leads := []leadRow{}
 	sessionIDs := []string{}
-	idxBySession := map[string]int{}
+	// A session can carry more than one submission (someone who re-submitted),
+	// so map each session to *every* lead row built from it. With a plain
+	// map[string]int the later row clobbered the earlier one and only one of the
+	// submissions got its picks attached — the rest rendered with blank scores.
+	idxBySession := map[string][]int{}
 	for rows.Next() {
 		var l leadRow
 		var sessionID string
@@ -863,7 +867,7 @@ func adminLeadsHandler(w http.ResponseWriter, r *http.Request) {
 		for _, id := range scenarioOrder {
 			l.Domains[id] = leadDomain{Score: -1}
 		}
-		idxBySession[sessionID] = len(leads)
+		idxBySession[sessionID] = append(idxBySession[sessionID], len(leads))
 		sessionIDs = append(sessionIDs, sessionID)
 		leads = append(leads, l)
 	}
@@ -904,14 +908,12 @@ func adminLeadsHandler(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "server error", http.StatusInternalServerError)
 				return
 			}
-			i, ok := idxBySession[sessionID]
-			if !ok {
-				continue
+			for _, i := range idxBySession[sessionID] {
+				if _, known := leads[i].Domains[scenario]; !known {
+					continue
+				}
+				leads[i].Domains[scenario] = leadDomain{Score: score, Color: color}
 			}
-			if _, known := leads[i].Domains[scenario]; !known {
-				continue
-			}
-			leads[i].Domains[scenario] = leadDomain{Score: score, Color: color}
 		}
 		if err := prows.Err(); err != nil {
 			log.Printf("leads picks rows: %v", err)
