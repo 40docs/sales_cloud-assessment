@@ -32,6 +32,8 @@ body{font-family:'Inter',system-ui,sans-serif;color:var(--text);-webkit-font-smo
 .page-sub{font-size:15px;color:var(--text2);line-height:1.5}
 
 .tabs{display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:28px}
+.filter-bar{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px}
+.filter-bar .status-select{padding:8px 12px;font-size:12px;min-width:160px}
 .tab{padding:12px 18px;font-size:13px;font-weight:600;color:var(--text2);background:none;border:none;cursor:pointer;font-family:inherit;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s}
 .tab:hover{color:var(--text)}
 .tab.active{color:var(--text);border-bottom-color:var(--red)}
@@ -185,6 +187,12 @@ button.primary:hover{filter:brightness(1.08)}
     <!-- ── DASHBOARD PANEL ── -->
     <section class="panel active" id="panel-dashboard">
 
+      <!-- FILTER BAR -->
+      <div class="filter-bar">
+        <select class="status-select" id="filterEvent"><option value="">All events</option></select>
+        <select class="status-select" id="filterPresenter"><option value="">All presenters</option></select>
+      </div>
+
       <!-- STATS -->
       <div class="stats">
         <div class="stat">
@@ -323,6 +331,36 @@ const STATUS_OPTIONS=[
 ];
 const MAX_SCORE=8; // 4 scenarios * 2
 
+let EVENTS=[];
+function filterQS(){
+  const e=document.getElementById('filterEvent').value;
+  const p=document.getElementById('filterPresenter').value;
+  return 'event='+encodeURIComponent(e)+'&presenter='+encodeURIComponent(p);
+}
+function populatePresenters(){
+  const eSel=document.getElementById('filterEvent');
+  const pSel=document.getElementById('filterPresenter');
+  const ev=EVENTS.find(x=>x.event===eSel.value);
+  pSel.innerHTML='<option value="">All presenters</option>';
+  if(ev&&ev.presenters&&ev.presenters.length){
+    pSel.disabled=false;
+    ev.presenters.forEach(p=>{pSel.innerHTML+='<option value="'+esc(p)+'">'+esc(p)+'</option>';});
+  }else{
+    pSel.disabled=true;
+  }
+}
+async function loadEvents(){
+  const r=await fetch('/admin/events',{credentials:'same-origin'});
+  if(!r.ok)return;
+  EVENTS=await r.json();
+  const eSel=document.getElementById('filterEvent');
+  eSel.innerHTML='<option value="">All events</option>';
+  EVENTS.forEach(ev=>{eSel.innerHTML+='<option value="'+esc(ev.event)+'">'+esc(ev.event)+'</option>';});
+  populatePresenters();
+}
+document.getElementById('filterEvent').addEventListener('change',()=>{populatePresenters();loadStats();loadLeads();});
+document.getElementById('filterPresenter').addEventListener('change',()=>{loadStats();loadLeads();});
+
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 
 function scoreClass(pct){return pct>=80?'high':pct>=50?'mid':'low';}
@@ -335,7 +373,7 @@ function fmtTime(iso){
 }
 
 async function loadStats(){
-  const r=await fetch('/admin/stats',{credentials:'same-origin'});
+  const r=await fetch('/admin/stats?'+filterQS(),{credentials:'same-origin'});
   if(!r.ok)return;
   const s=await r.json();
   document.getElementById('statTotal').textContent=s.totalSubmissions;
@@ -439,7 +477,7 @@ function renderLeads(leads){
 let leadSearchTimer=null;
 async function loadLeads(){
   const q=document.getElementById('leadSearch').value.trim();
-  const r=await fetch('/admin/leads?q='+encodeURIComponent(q),{credentials:'same-origin'});
+  const r=await fetch('/admin/leads?q='+encodeURIComponent(q)+'&'+filterQS(),{credentials:'same-origin'});
   if(!r.ok)return;
   renderLeads(await r.json());
 }
@@ -449,8 +487,7 @@ document.getElementById('leadSearch').addEventListener('input',()=>{
   leadSearchTimer=setTimeout(loadLeads,250);
 });
 
-loadStats();
-loadLeads();
+loadEvents().then(()=>{loadStats();loadLeads();});
 
 // ── Mint (ported from portal.html, unchanged behavior) ────────────────
 document.getElementById('mintForm').addEventListener('submit', async function(e){

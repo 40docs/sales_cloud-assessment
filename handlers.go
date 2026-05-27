@@ -534,20 +534,34 @@ func adminStatsHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
+	event := strings.TrimSpace(r.URL.Query().Get("event"))
+	presenter := strings.TrimSpace(r.URL.Query().Get("presenter"))
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
 	stats := adminStats{PostureByDomain: []domainPosture{}}
 
-	if err := db.QueryRowContext(ctx,
-		`SELECT count(*) FROM submissions`).Scan(&stats.TotalSubmissions); err != nil {
+	if err := db.QueryRowContext(ctx, `
+		SELECT count(*)
+		FROM submissions
+		JOIN sessions sess ON sess.id = submissions.session_id
+		WHERE (sess.event_id = $1 OR $1 = '')
+		  AND (COALESCE(sess.presenter_id,'') = $2 OR $2 = '')`,
+		event, presenter).Scan(&stats.TotalSubmissions); err != nil {
 		log.Printf("stats submissions: %v", err)
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
 
-	if err := db.QueryRowContext(ctx,
-		`SELECT count(*) FROM lead_status WHERE status = 'meeting_booked'`).Scan(&stats.MeetingsBooked); err != nil {
+	if err := db.QueryRowContext(ctx, `
+		SELECT count(*)
+		FROM lead_status ls
+		JOIN submissions s ON s.id = ls.submission_id
+		JOIN sessions sess ON sess.id = s.session_id
+		WHERE ls.status = 'meeting_booked'
+		  AND (sess.event_id = $1 OR $1 = '')
+		  AND (COALESCE(sess.presenter_id,'') = $2 OR $2 = '')`,
+		event, presenter).Scan(&stats.MeetingsBooked); err != nil {
 		log.Printf("stats meetings: %v", err)
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
@@ -558,8 +572,11 @@ func adminStatsHandler(w http.ResponseWriter, r *http.Request) {
 	frows, err := db.QueryContext(ctx, `
 		SELECT COALESCE(ls.status, 'new') AS status, count(*)
 		FROM submissions s
+		JOIN sessions sess ON sess.id = s.session_id
 		LEFT JOIN lead_status ls ON ls.submission_id = s.id
-		GROUP BY COALESCE(ls.status, 'new')`)
+		WHERE (sess.event_id = $1 OR $1 = '')
+		  AND (COALESCE(sess.presenter_id,'') = $2 OR $2 = '')
+		GROUP BY COALESCE(ls.status, 'new')`, event, presenter)
 	if err != nil {
 		log.Printf("stats funnel: %v", err)
 		http.Error(w, "server error", http.StatusInternalServerError)
@@ -591,17 +608,20 @@ func adminStatsHandler(w http.ResponseWriter, r *http.Request) {
 	// per session so a session can't double-count a domain.
 	rows, err := db.QueryContext(ctx, `
 		WITH latest AS (
-			SELECT DISTINCT ON (session_id, scenario)
-				session_id, scenario, color
-			FROM picks
-			ORDER BY session_id, scenario, picked_at DESC
+			SELECT DISTINCT ON (p.session_id, p.scenario)
+				p.session_id, p.scenario, p.color
+			FROM picks p
+			JOIN sessions sess ON sess.id = p.session_id
+			WHERE (sess.event_id = $1 OR $1 = '')
+			  AND (COALESCE(sess.presenter_id,'') = $2 OR $2 = '')
+			ORDER BY p.session_id, p.scenario, p.picked_at DESC
 		)
 		SELECT scenario,
 			count(*) FILTER (WHERE color = 'red')    AS red,
 			count(*) FILTER (WHERE color = 'yellow') AS yellow,
 			count(*) FILTER (WHERE color = 'green')  AS green
 		FROM latest
-		GROUP BY scenario`)
+		GROUP BY scenario`, event, presenter)
 	if err != nil {
 		log.Printf("stats posture: %v", err)
 		http.Error(w, "server error", http.StatusInternalServerError)
@@ -641,13 +661,16 @@ func adminStatsHandler(w http.ResponseWriter, r *http.Request) {
 				p.session_id, p.scenario, p.score, p.color
 			FROM picks p
 			JOIN submissions s ON s.session_id = p.session_id
+			JOIN sessions sess ON sess.id = p.session_id
+			WHERE (sess.event_id = $1 OR $1 = '')
+			  AND (COALESCE(sess.presenter_id,'') = $2 OR $2 = '')
 			ORDER BY p.session_id, p.scenario, p.picked_at DESC
 		)
 		SELECT session_id,
 			sum(score)::int                            AS total,
 			count(*) FILTER (WHERE color = 'red')::int AS reds
 		FROM latest
-		GROUP BY session_id`)
+		GROUP BY session_id`, event, presenter)
 	if err != nil {
 		log.Printf("stats sessions: %v", err)
 		http.Error(w, "server error", http.StatusInternalServerError)
@@ -685,6 +708,69 @@ func adminStatsHandler(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(stats)
 }
 
+// adminEvent is one event with the presenters seen for it in the session data.
+type adminEvent struct {
+	Event      string   `json:"event"`
+	Presenters []string `json:"presenters"`
+}
+
+// adminEventsHandler returns events + presenters present in the data, for the
+// dashboard's cascading Event -> Presenter filter dropdowns.
+func adminEventsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !adminAuthed(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	rows, err := db.QueryContext(ctx, `
+		SELECT event_id, COALESCE(presenter_id, '') AS presenter, count(*)
+		FROM sessions
+		GROUP BY event_id, presenter_id
+		ORDER BY event_id, presenter`)
+	if err != nil {
+		log.Printf("events query: %v", err)
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	events := []adminEvent{}
+	idxByEvent := map[string]int{}
+	for rows.Next() {
+		var eventID, presenter string
+		var n int
+		if err := rows.Scan(&eventID, &presenter, &n); err != nil {
+			log.Printf("events scan: %v", err)
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		i, ok := idxByEvent[eventID]
+		if !ok {
+			i = len(events)
+			idxByEvent[eventID] = i
+			events = append(events, adminEvent{Event: eventID, Presenters: []string{}})
+		}
+		if presenter != "" {
+			events[i].Presenters = append(events[i].Presenters, presenter)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("events rows: %v", err)
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(events)
+}
+
 type leadDomain struct {
 	Score int    `json:"score"` // 0/1/2, -1 if not answered
 	Color string `json:"color"` // red|yellow|green|"" if not answered
@@ -713,6 +799,8 @@ func adminLeadsHandler(w http.ResponseWriter, r *http.Request) {
 	if len(q) > 256 {
 		q = q[:256]
 	}
+	event := strings.TrimSpace(r.URL.Query().Get("event"))
+	presenter := strings.TrimSpace(r.URL.Query().Get("presenter"))
 
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
@@ -727,8 +815,10 @@ func adminLeadsHandler(w http.ResponseWriter, r *http.Request) {
 		JOIN sessions sess ON sess.id = s.session_id
 		LEFT JOIN lead_status ls ON ls.submission_id = s.id
 		WHERE s.email ILIKE '%' || $1 || '%'
+		  AND (sess.event_id = $2 OR $2 = '')
+		  AND (COALESCE(sess.presenter_id,'') = $3 OR $3 = '')
 		ORDER BY s.submitted_at DESC
-		LIMIT 500`, q)
+		LIMIT 500`, q, event, presenter)
 	if err != nil {
 		log.Printf("leads query: %v", err)
 		http.Error(w, "server error", http.StatusInternalServerError)
@@ -772,9 +862,12 @@ func adminLeadsHandler(w http.ResponseWriter, r *http.Request) {
 			FROM picks p
 			WHERE p.session_id IN (
 				SELECT s.session_id FROM submissions s
+				JOIN sessions sess ON sess.id = s.session_id
 				WHERE s.email ILIKE '%' || $1 || '%'
+				  AND (sess.event_id = $2 OR $2 = '')
+				  AND (COALESCE(sess.presenter_id,'') = $3 OR $3 = '')
 			)
-			ORDER BY p.session_id, p.scenario, p.picked_at DESC`, q)
+			ORDER BY p.session_id, p.scenario, p.picked_at DESC`, q, event, presenter)
 		if err != nil {
 			log.Printf("leads picks: %v", err)
 			http.Error(w, "server error", http.StatusInternalServerError)
