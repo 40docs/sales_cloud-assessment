@@ -47,6 +47,11 @@ body{font-family:'Inter',system-ui,sans-serif;color:var(--text);-webkit-font-smo
 .stat-trend{font-size:12px;color:var(--text3);margin-top:8px;display:flex;align-items:center;gap:5px}
 .stat.alert{border-color:rgba(218,41,28,0.25);background:rgba(218,41,28,0.04)}
 .stat.alert .stat-value{color:var(--red)}
+.funnel-mini{display:flex;height:12px;border-radius:6px;overflow:hidden;background:var(--surface2);margin:4px 0 10px}
+.funnel-mini span{display:block;height:100%}
+.funnel-legend{display:flex;flex-wrap:wrap;gap:5px 12px;font-size:11px;font-weight:600;color:var(--text2)}
+.funnel-legend .fl{display:flex;align-items:center;gap:5px}
+.funnel-legend .fdot{width:8px;height:8px;border-radius:2px;display:inline-block}
 
 /* ── BREAKDOWN SECTION ── */
 .breakdown{margin-bottom:32px;padding:24px;border-radius:16px;border:1px solid var(--border);background:var(--surface)}
@@ -198,9 +203,9 @@ button.primary:hover{filter:brightness(1.08)}
           <div class="stat-trend">Significant gaps</div>
         </div>
         <div class="stat">
-          <div class="stat-label">Meetings Booked</div>
-          <div class="stat-value" id="statMeetings">—</div>
-          <div class="stat-trend">Follow-ups secured</div>
+          <div class="stat-label">Lead Funnel</div>
+          <div class="funnel-mini" id="funnelBar"></div>
+          <div class="funnel-legend" id="funnelLegend"></div>
         </div>
       </div>
 
@@ -216,14 +221,6 @@ button.primary:hover{filter:brightness(1.08)}
           <div class="legend-item"><span class="dot yellow"></span>Partial</div>
           <div class="legend-item"><span class="dot red"></span>At Risk</div>
         </div>
-      </section>
-
-      <!-- LEAD FUNNEL -->
-      <section class="breakdown">
-        <div class="section-head">
-          <div class="section-title">Lead Funnel</div>
-        </div>
-        <div class="bar-chart" id="funnel"></div>
       </section>
 
       <!-- LEADS TABLE -->
@@ -344,8 +341,14 @@ async function loadStats(){
   document.getElementById('statTotal').textContent=s.totalSubmissions;
   document.getElementById('statAvg').textContent=s.avgPosturePct+'%';
   document.getElementById('statHigh').textContent=s.highPriority;
-  document.getElementById('statMeetings').textContent=s.meetingsBooked;
   document.getElementById('postureMeta').textContent=s.totalSubmissions+' submissions';
+
+  // Lead funnel card: mini stacked bar + per-stage counts (new -> contacted -> booked -> closed)
+  const FSTAGES=[{k:'new',label:'New',c:'#6b6b70'},{k:'contacted',label:'Contacted',c:'#e0a32e'},{k:'meeting_booked',label:'Booked',c:'#3CB17E'},{k:'closed',label:'Closed',c:'#726bea'}];
+  const fc={}; (s.funnel||[]).forEach(f=>fc[f.status]=f.count||0);
+  const ftotal=FSTAGES.reduce((a,st)=>a+(fc[st.k]||0),0)||1;
+  document.getElementById('funnelBar').innerHTML=FSTAGES.map(st=>'<span style="width:'+((fc[st.k]||0)/ftotal*100)+'%;background:'+st.c+'"></span>').join('');
+  document.getElementById('funnelLegend').innerHTML=FSTAGES.map(st=>'<span class="fl"><span class="fdot" style="background:'+st.c+'"></span>'+st.label+' '+(fc[st.k]||0)+'</span>').join('');
 
   const labels={}; DOMAINS.forEach(d=>labels[d.id]=d.label);
   const chart=document.getElementById('barChart');
@@ -368,21 +371,6 @@ async function loadStats(){
         '<span class="bar-count"><span class="dot red"></span>'+(d.red||0)+'</span>'+
       '</div>';
     chart.appendChild(row);
-  });
-
-  const flabels={new:'New',contacted:'Contacted',meeting_booked:'Meeting Booked',closed:'Closed'};
-  const fmax=Math.max(1,...(s.funnel||[]).map(f=>f.count||0));
-  const funnel=document.getElementById('funnel');
-  funnel.innerHTML='';
-  (s.funnel||[]).forEach(f=>{
-    const w=Math.round((f.count||0)/fmax*100);
-    const row=document.createElement('div');
-    row.className='bar-row';
-    row.innerHTML=
-      '<div class="bar-domain">'+esc(flabels[f.status]||f.status)+'</div>'+
-      '<div class="bar-track"><div class="bar-seg" style="width:'+w+'%;background:#726bea"></div></div>'+
-      '<div class="bar-counts"><span class="bar-count">'+(f.count||0)+'</span></div>';
-    funnel.appendChild(row);
   });
 }
 
