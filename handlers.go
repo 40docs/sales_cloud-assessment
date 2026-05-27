@@ -485,6 +485,9 @@ var leadStatuses = map[string]bool{
 	"new": true, "contacted": true, "meeting_booked": true, "closed": true,
 }
 
+// leadFunnelOrder is the lead lifecycle order shown in the dashboard funnel.
+var leadFunnelOrder = []string{"new", "contacted", "meeting_booked", "closed"}
+
 // postureBand returns the band label the deck would show for a given total
 // score and red count. pct is total/assessmentMaxScore as a percentage.
 func postureBand(total, reds int) string {
@@ -508,12 +511,18 @@ type domainPosture struct {
 	Green    int    `json:"green"`
 }
 
+type funnelStage struct {
+	Status string `json:"status"`
+	Count  int    `json:"count"`
+}
+
 type adminStats struct {
 	TotalSubmissions int             `json:"totalSubmissions"`
 	AvgPosturePct    int             `json:"avgPosturePct"`
 	HighPriority     int             `json:"highPriority"`
 	MeetingsBooked   int             `json:"meetingsBooked"`
 	PostureByDomain  []domainPosture `json:"postureByDomain"`
+	Funnel           []funnelStage   `json:"funnel"`
 }
 
 func adminStatsHandler(w http.ResponseWriter, r *http.Request) {
@@ -542,6 +551,40 @@ func adminStatsHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("stats meetings: %v", err)
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
+	}
+
+	// Lead funnel: submissions grouped by status, treating a missing lead_status
+	// row as 'new'. Emitted in lifecycle order (leadFunnelOrder).
+	frows, err := db.QueryContext(ctx, `
+		SELECT COALESCE(ls.status, 'new') AS status, count(*)
+		FROM submissions s
+		LEFT JOIN lead_status ls ON ls.submission_id = s.id
+		GROUP BY COALESCE(ls.status, 'new')`)
+	if err != nil {
+		log.Printf("stats funnel: %v", err)
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	defer frows.Close()
+	funnelCounts := map[string]int{}
+	for frows.Next() {
+		var st string
+		var n int
+		if err := frows.Scan(&st, &n); err != nil {
+			log.Printf("stats funnel scan: %v", err)
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		funnelCounts[st] = n
+	}
+	if err := frows.Err(); err != nil {
+		log.Printf("stats funnel rows: %v", err)
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	stats.Funnel = make([]funnelStage, 0, len(leadFunnelOrder))
+	for _, st := range leadFunnelOrder {
+		stats.Funnel = append(stats.Funnel, funnelStage{Status: st, Count: funnelCounts[st]})
 	}
 
 	// Per-domain red/yellow/green counts, using the latest pick per scenario

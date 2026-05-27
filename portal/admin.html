@@ -218,6 +218,14 @@ button.primary:hover{filter:brightness(1.08)}
         </div>
       </section>
 
+      <!-- LEAD FUNNEL -->
+      <section class="breakdown">
+        <div class="section-head">
+          <div class="section-title">Lead Funnel</div>
+        </div>
+        <div class="bar-chart" id="funnel"></div>
+      </section>
+
       <!-- LEADS TABLE -->
       <section class="leads">
         <div class="leads-head">
@@ -360,6 +368,21 @@ async function loadStats(){
         '<span class="bar-count"><span class="dot red"></span>'+(d.red||0)+'</span>'+
       '</div>';
     chart.appendChild(row);
+  });
+
+  const flabels={new:'New',contacted:'Contacted',meeting_booked:'Meeting Booked',closed:'Closed'};
+  const fmax=Math.max(1,...(s.funnel||[]).map(f=>f.count||0));
+  const funnel=document.getElementById('funnel');
+  funnel.innerHTML='';
+  (s.funnel||[]).forEach(f=>{
+    const w=Math.round((f.count||0)/fmax*100);
+    const row=document.createElement('div');
+    row.className='bar-row';
+    row.innerHTML=
+      '<div class="bar-domain">'+esc(flabels[f.status]||f.status)+'</div>'+
+      '<div class="bar-track"><div class="bar-seg" style="width:'+w+'%;background:#726bea"></div></div>'+
+      '<div class="bar-counts"><span class="bar-count">'+(f.count||0)+'</span></div>';
+    funnel.appendChild(row);
   });
 }
 
