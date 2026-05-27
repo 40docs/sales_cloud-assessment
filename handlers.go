@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"log"
 	"net"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"rsc.io/qr"
 )
 
@@ -283,6 +285,15 @@ func recordEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
+		// A foreign-key violation means the session row behind this cookie is
+		// gone — e.g. a lead was removed in the admin console while the browser
+		// held onto its wt_sess cookie. Tell the client to re-scan instead of
+		// silently dropping the write behind a generic 500.
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+			http.Error(w, "your session has expired — re-scan the event QR code", http.StatusUnauthorized)
+			return
+		}
 		log.Printf("event insert (%s): %v", p.Event, err)
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return

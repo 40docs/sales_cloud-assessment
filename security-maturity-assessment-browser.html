@@ -555,7 +555,17 @@ updatePips();
     window.sendReport = function(){
       try {
         if (typeof userEmail === 'string' && userEmail) {
-          post({event:'submit', email:userEmail, scores:scores});
+          // Submit must know whether it actually landed, so use fetch (not the
+          // fire-and-forget beacon) and warn the attendee if their session was
+          // deleted/expired rather than letting the lead vanish silently.
+          fetch('/api/event',{method:'POST',credentials:'same-origin',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({event:'submit', email:userEmail, scores:scores})})
+            .then(function(r){
+              if(r.status===401){
+                alert('Your session has expired — please re-scan the event QR code so your results can be saved.');
+              }
+            }).catch(function(){});
         }
       } catch(e){}
       return origSendReport();
