@@ -741,6 +741,7 @@ func adminEventsHandler(w http.ResponseWriter, r *http.Request) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT event_id, COALESCE(presenter_id, '') AS presenter, count(*)
 		FROM sessions
+		WHERE EXISTS (SELECT 1 FROM submissions sub WHERE sub.session_id = sessions.id)
 		GROUP BY event_id, presenter_id
 		ORDER BY event_id, presenter`)
 	if err != nil {
