@@ -57,6 +57,15 @@ func must(err error) {
 	}
 }
 
+// dsnPwRe matches the password segment of a scheme://user:password@host DSN.
+var dsnPwRe = regexp.MustCompile(`(://[^:@/\s]+:)[^@/\s]+(@)`)
+
+// redactDSN masks DSN passwords in s so connection strings — and driver errors
+// that embed DATABASE_URL — never reach the logs in clear text.
+func redactDSN(s string) string {
+	return dsnPwRe.ReplaceAllString(s, "${1}xxxxx${2}")
+}
+
 func okHandler(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok")) }
 
 func withLogging(h http.Handler) http.Handler {

@@ -50,13 +50,19 @@ func main() {
 
 	var err error
 	db, err = sql.Open("pgx", dbURL)
-	must(err)
+	if err != nil {
+		log.Fatalf("open database: %s", redactDSN(err.Error()))
+	}
 	defer db.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	must(db.PingContext(ctx))
-	must(applyMigrations(db))
+	if err := db.PingContext(ctx); err != nil {
+		log.Fatalf("connect database: %s", redactDSN(err.Error()))
+	}
+	if err := applyMigrations(db); err != nil {
+		log.Fatalf("apply migrations: %s", redactDSN(err.Error()))
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", okHandler)
