@@ -34,6 +34,13 @@ body{font-family:'Inter',system-ui,sans-serif;color:var(--text);-webkit-font-smo
 .tabs{display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:28px}
 .filter-bar{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px}
 .filter-bar .status-select{padding:8px 12px;font-size:12px;min-width:160px}
+.lead-actions{display:flex;align-items:center;gap:8px}
+.lead-remove{width:22px;height:22px;border-radius:6px;border:1px solid var(--border);background:none;color:var(--text3);font-size:14px;line-height:1;cursor:pointer;font-family:inherit;flex:none}
+.lead-remove:hover{color:var(--red);border-color:var(--red)}
+.token-status{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.token-status.active{color:#3CB17E}
+.token-status.pending{color:#e0a32e}
+.token-status.expired{color:#86868b}
 .tab{padding:12px 18px;font-size:13px;font-weight:600;color:var(--text2);background:none;border:none;cursor:pointer;font-family:inherit;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s}
 .tab:hover{color:var(--text)}
 .tab.active{color:var(--text);border-bottom-color:var(--red)}
@@ -182,6 +189,7 @@ button.primary:hover{filter:brightness(1.08)}
     <div class="tabs">
       <button class="tab active" data-tab="dashboard">Dashboard</button>
       <button class="tab" data-tab="mint">Mint</button>
+      <button class="tab" data-tab="tokens">Tokens</button>
     </div>
 
     <!-- ── DASHBOARD PANEL ── -->
@@ -279,7 +287,6 @@ button.primary:hover{filter:brightness(1.08)}
               <div><label>Starts</label><input type="datetime-local" name="nbf" required></div>
               <div><label>Ends</label><input type="datetime-local" name="exp" required></div>
             </div>
-            <div><label>Max scans (optional)</label><input type="number" name="max_uses" min="0" placeholder="0 = unlimited within window"></div>
             <button class="primary" type="submit">Mint &amp; show QR</button>
           </form>
         </div>
@@ -300,6 +307,32 @@ button.primary:hover{filter:brightness(1.08)}
       </div>
     </section>
 
+    <section class="panel" id="panel-tokens">
+      <section class="leads">
+        <div class="leads-head">
+          <div class="leads-head-top">
+            <div class="section-title">Minted Tokens</div>
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Event</th>
+              <th>Name</th>
+              <th>Presenter</th>
+              <th>Window</th>
+              <th>Minted</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="tokensBody"></tbody>
+        </table>
+        <div class="table-foot">
+          <div class="foot-info" id="tokensCount"></div>
+        </div>
+      </section>
+    </section>
+
   </main>
 </div>
 
@@ -313,6 +346,7 @@ button.primary:hover{filter:brightness(1.08)}
     panels.forEach(p=>p.classList.remove('active'));
     t.classList.add('active');
     document.getElementById('panel-'+t.dataset.tab).classList.add('active');
+    if(t.dataset.tab==='tokens')loadTokens();
   }));
 })();
 
@@ -451,7 +485,7 @@ function renderLeads(leads){
       '<td><div class="timestamp">'+esc(fmtTime(l.submittedAt))+'</div></td>'+
       domainCell(dm.network)+domainCell(dm.app)+domainCell(dm.cnapp)+domainCell(dm.sspm)+
       '<td><span class="score '+scoreClass(pct)+'">'+pct+'%</span></td>'+
-      '<td>'+statusSelect(l)+'</td>';
+      '<td class="lead-actions">'+statusSelect(l)+'<button class="lead-remove" data-id="'+l.submissionId+'" title="Remove lead (deletes its session)">&times;</button></td>';
     body.appendChild(tr);
   });
   body.querySelectorAll('.status-select').forEach(sel=>{
@@ -472,6 +506,19 @@ function renderLeads(leads){
       loadLeads();
     });
   });
+  body.querySelectorAll('.lead-remove').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      if(!confirm('Remove this lead? This permanently deletes the session (its picks + submission).'))return;
+      const id=Number(btn.dataset.id);
+      const r=await fetch('/admin/leads/delete',{
+        method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',
+        body:JSON.stringify({submission_id:id})
+      });
+      if(!r.ok){alert('Remove failed: '+r.status);return;}
+      loadStats();
+      loadLeads();
+    });
+  });
 }
 
 let leadSearchTimer=null;
@@ -480,6 +527,41 @@ async function loadLeads(){
   const r=await fetch('/admin/leads?q='+encodeURIComponent(q)+'&'+filterQS(),{credentials:'same-origin'});
   if(!r.ok)return;
   renderLeads(await r.json());
+}
+
+async function loadTokens(){
+  const r=await fetch('/admin/tokens',{credentials:'same-origin'});
+  if(!r.ok)return;
+  renderTokens(await r.json());
+}
+function renderTokens(tokens){
+  const body=document.getElementById('tokensBody');
+  const count=document.getElementById('tokensCount');
+  body.innerHTML='';
+  if(!tokens.length){
+    body.innerHTML='<tr><td colspan="6" style="padding:32px 16px;text-align:center;color:var(--text3);font-size:13px">No tokens minted yet.</td></tr>';
+    count.textContent='No tokens';
+    return;
+  }
+  const now=Date.now();
+  count.textContent=tokens.length+' token'+(tokens.length===1?'':'s');
+  tokens.forEach(t=>{
+    const nb=t.notBefore?new Date(t.notBefore).getTime():null;
+    const ex=t.expiresAt?new Date(t.expiresAt).getTime():null;
+    let status='active';
+    if(nb&&now<nb)status='pending';
+    else if(ex&&now>ex)status='expired';
+    const win=(t.notBefore?fmtTime(t.notBefore):'—')+' → '+(t.expiresAt?fmtTime(t.expiresAt):'—');
+    const tr=document.createElement('tr');
+    tr.innerHTML=
+      '<td>'+esc(t.eventId)+'</td>'+
+      '<td>'+esc(t.eventName||'—')+'</td>'+
+      '<td>'+esc(t.presenterId||'—')+'</td>'+
+      '<td><div class="timestamp">'+esc(win)+'</div></td>'+
+      '<td><div class="timestamp">'+esc(fmtTime(t.mintedAt))+'</div></td>'+
+      '<td><span class="token-status '+status+'">'+status+'</span></td>';
+    body.appendChild(tr);
+  });
 }
 
 document.getElementById('leadSearch').addEventListener('input',()=>{
@@ -499,8 +581,7 @@ document.getElementById('mintForm').addEventListener('submit', async function(e)
     event_name:(f.get('event_name')||'').trim(),
     presenter_id:(f.get('presenter_id')||'').trim(),
     nbf:toIso(f.get('nbf')),
-    exp:toIso(f.get('exp')),
-    max_uses:Number(f.get('max_uses')||0)
+    exp:toIso(f.get('exp'))
   };
   const r=await fetch('/admin/mint',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),credentials:'same-origin'});
   if(!r.ok){alert('Mint failed: '+r.status+' '+await r.text());return;}

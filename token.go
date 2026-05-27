@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 )
 
 var (
@@ -32,7 +31,6 @@ type urlClaims struct {
 	EventID     string `json:"eid"`
 	EventName   string `json:"en,omitempty"`
 	PresenterID string `json:"pid,omitempty"`
-	MaxUses     int    `json:"mu,omitempty"`
 	Typ         string `json:"typ"`
 }
 
@@ -80,18 +78,18 @@ func parseInto(raw string, dst jwt.Claims, expectedAud string) error {
 	return err
 }
 
-func mintURLToken(eventID, eventName, presenterID string, nbf, exp time.Time, maxUses int) (string, error) {
+func mintURLToken(tokenID, eventID, eventName, presenterID string, nbf, exp time.Time) (string, error) {
 	return sign(urlClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer: "assessment", Subject: presenterID,
 			Audience:  jwt.ClaimStrings{audURL},
-			ID:        uuid.NewString(),
+			ID:        tokenID,
 			NotBefore: jwt.NewNumericDate(nbf),
 			ExpiresAt: jwt.NewNumericDate(exp),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 		EventID: eventID, EventName: eventName, PresenterID: presenterID,
-		MaxUses: maxUses, Typ: typURL,
+		Typ: typURL,
 	})
 }
 

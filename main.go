@@ -78,7 +78,9 @@ func main() {
 	mux.HandleFunc("/admin/stats", adminStatsHandler)
 	mux.HandleFunc("/admin/leads", adminLeadsHandler)
 	mux.HandleFunc("/admin/leads/status", adminLeadStatusHandler)
+	mux.HandleFunc("/admin/leads/delete", adminLeadDeleteHandler)
 	mux.HandleFunc("/admin/events", adminEventsHandler)
+	mux.HandleFunc("/admin/tokens", adminTokensHandler)
 
 	mux.HandleFunc("/", serveDeck)
 

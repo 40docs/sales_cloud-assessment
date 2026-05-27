@@ -397,7 +397,6 @@ type mintRequest struct {
 	PresenterID string `json:"presenter_id"`
 	NotBefore   string `json:"nbf"`
 	Expires     string `json:"exp"`
-	MaxUses     int    `json:"max_uses"`
 }
 
 type mintResponse struct {
@@ -450,10 +449,21 @@ func adminMint(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid time window (max 30 days)", http.StatusBadRequest)
 		return
 	}
-	tok, err := mintURLToken(req.EventID, req.EventName, req.PresenterID, nbf, exp, req.MaxUses)
+	tokenID := uuid.NewString()
+	tok, err := mintURLToken(tokenID, req.EventID, req.EventName, req.PresenterID, nbf, exp)
 	if err != nil {
 		http.Error(w, "mint failed", http.StatusInternalServerError)
 		return
+	}
+	// Record the mint for the admin Tokens tab (best-effort; never fail the mint).
+	mctx, mcancel := context.WithTimeout(r.Context(), 5*time.Second)
+	_, derr := db.ExecContext(mctx, `
+		INSERT INTO minted_tokens (id, event_id, event_name, presenter_id, not_before, expires_at)
+		VALUES ($1, $2, NULLIF($3,''), NULLIF($4,''), $5, $6)`,
+		tokenID, req.EventID, req.EventName, req.PresenterID, nbf, exp)
+	mcancel()
+	if derr != nil {
+		log.Printf("mint log: %v", derr)
 	}
 	log.Printf("admin mint event=%q presenter=%q nbf=%s exp=%s ip=%s",
 		req.EventID, req.PresenterID, nbf.Format(time.RFC3339), exp.Format(time.RFC3339), clientIP(r))
@@ -980,6 +990,107 @@ func adminLeadStatusHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+type leadDeleteRequest struct {
+	SubmissionID int64 `json:"submission_id"`
+}
+
+// adminLeadDeleteHandler removes a lead by deleting its whole session; ON DELETE
+// CASCADE clears the session's picks, submission, and lead_status. Used to drop
+// double-scan duplicates.
+func adminLeadDeleteHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !adminAuthed(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	var req leadDeleteRequest
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1024)).Decode(&req); err != nil {
+		http.Error(w, "bad json", http.StatusBadRequest)
+		return
+	}
+	if req.SubmissionID <= 0 {
+		http.Error(w, "submission_id required", http.StatusBadRequest)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	res, err := db.ExecContext(ctx, `
+		DELETE FROM sessions
+		WHERE id = (SELECT session_id FROM submissions WHERE id = $1)`, req.SubmissionID)
+	if err != nil {
+		log.Printf("lead delete: %v", err)
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		http.Error(w, "unknown submission", http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type mintedToken struct {
+	ID          string     `json:"id"`
+	EventID     string     `json:"eventId"`
+	EventName   string     `json:"eventName"`
+	PresenterID string     `json:"presenterId"`
+	NotBefore   *time.Time `json:"notBefore"`
+	ExpiresAt   *time.Time `json:"expiresAt"`
+	MintedAt    time.Time  `json:"mintedAt"`
+}
+
+// adminTokensHandler lists minted tokens for the admin Tokens tab (view/log only).
+func adminTokensHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !adminAuthed(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	rows, err := db.QueryContext(ctx, `
+		SELECT id, event_id, COALESCE(event_name,''), COALESCE(presenter_id,''),
+			not_before, expires_at, minted_at
+		FROM minted_tokens
+		ORDER BY minted_at DESC
+		LIMIT 500`)
+	if err != nil {
+		log.Printf("tokens query: %v", err)
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	tokens := []mintedToken{}
+	for rows.Next() {
+		var t mintedToken
+		if err := rows.Scan(&t.ID, &t.EventID, &t.EventName, &t.PresenterID,
+			&t.NotBefore, &t.ExpiresAt, &t.MintedAt); err != nil {
+			log.Printf("tokens scan: %v", err)
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		tokens = append(tokens, t)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("tokens rows: %v", err)
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(tokens)
 }
 
 func adminQR(w http.ResponseWriter, r *http.Request) {
