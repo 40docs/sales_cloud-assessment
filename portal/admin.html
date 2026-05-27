@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Assessment Admin · Lead Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#000;--surface:#0a0a0a;--surface2:#141414;--text:#f5f5f7;--text2:#86868b;--text3:#48484a;--border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.1);--blue:#307FE2;--orange:#FFB900;--red:#DA291C;--green:#3CB17E;--purple:#9063CD;--teal:#2CCCD3}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100%;background:var(--bg)}
+body{font-family:'Inter',system-ui,sans-serif;color:var(--text);-webkit-font-smoothing:antialiased}
+
+.app{min-height:100vh;display:flex;flex-direction:column}
+
+/* ── TOPBAR ── */
+.topbar{position:sticky;top:0;height:54px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;background:rgba(0,0,0,0.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border);z-index:10}
+.topbar-left{display:flex;align-items:center;gap:14px}
+.brand-logo{height:18px;width:auto;color:var(--text);flex-shrink:0}
+.brand-sep{width:1px;height:18px;background:var(--border2);flex-shrink:0}
+.topbar-title{font-size:11px;font-weight:600;color:var(--text2);letter-spacing:1.8px;text-transform:uppercase}
+.topbar-right{display:flex;align-items:center;gap:14px}
+.logout{font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text2);background:none;border:1px solid rgba(255,255,255,0.12);padding:8px 14px;border-radius:18px;cursor:pointer;font-family:inherit}
+.logout:hover{color:var(--text);border-color:rgba(255,255,255,0.3)}
+
+/* ── PAGE ── */
+.dashboard{flex:1;padding:32px 24px 80px;max-width:1280px;width:100%;margin:0 auto}
+
+.page-header{margin-bottom:28px}
+.page-eyebrow{font-size:11px;font-weight:600;letter-spacing:1.8px;text-transform:uppercase;color:var(--red);margin-bottom:8px}
+.page-title{font-size:clamp(28px,4vw,38px);font-weight:800;letter-spacing:-0.02em;line-height:1.1;margin-bottom:6px}
+.page-sub{font-size:15px;color:var(--text2);line-height:1.5}
+
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:28px}
+.tab{padding:12px 18px;font-size:13px;font-weight:600;color:var(--text2);background:none;border:none;cursor:pointer;font-family:inherit;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--text);border-bottom-color:var(--red)}
+
+.panel{display:none}
+.panel.active{display:block}
+
+/* ── STATS GRID ── */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:32px}
+.stat{padding:18px 20px;border-radius:14px;border:1px solid var(--border);background:var(--surface);position:relative;overflow:hidden}
+.stat-label{font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text2);margin-bottom:10px}
+.stat-value{font-size:30px;font-weight:800;letter-spacing:-0.02em;line-height:1}
+.stat-trend{font-size:12px;color:var(--text3);margin-top:8px;display:flex;align-items:center;gap:5px}
+.stat.alert{border-color:rgba(218,41,28,0.25);background:rgba(218,41,28,0.04)}
+.stat.alert .stat-value{color:var(--red)}
+
+/* ── BREAKDOWN SECTION ── */
+.breakdown{margin-bottom:32px;padding:24px;border-radius:16px;border:1px solid var(--border);background:var(--surface)}
+.section-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:18px}
+.section-title{font-size:13px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text)}
+.section-meta{font-size:12px;color:var(--text3)}
+
+.bar-chart{display:flex;flex-direction:column;gap:14px}
+.bar-row{display:grid;grid-template-columns:160px 1fr 80px;gap:16px;align-items:center}
+.bar-domain{font-size:13px;font-weight:600;color:var(--text)}
+.bar-track{height:10px;border-radius:5px;background:rgba(255,255,255,0.04);display:flex;overflow:hidden}
+.bar-seg{height:100%;transition:width .3s}
+.bar-seg.red{background:var(--red)}
+.bar-seg.yellow{background:var(--orange)}
+.bar-seg.green{background:var(--green)}
+.bar-counts{display:flex;gap:8px;justify-content:flex-end;font-size:11px;font-weight:600;color:var(--text2)}
+.bar-count{display:flex;align-items:center;gap:4px}
+.dot{width:6px;height:6px;border-radius:50%}
+.dot.red{background:var(--red)}
+.dot.yellow{background:var(--orange)}
+.dot.green{background:var(--green)}
+
+.legend{display:flex;gap:18px;margin-top:18px;padding-top:16px;border-top:1px solid var(--border);font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text2)}
+.legend-item{display:flex;align-items:center;gap:6px}
+.legend-item .dot{width:8px;height:8px}
+
+/* ── LEAD TABLE ── */
+.leads{border-radius:16px;border:1px solid var(--border);background:var(--surface);overflow:hidden}
+.leads-head{display:flex;flex-direction:column;gap:14px;padding:20px 24px;border-bottom:1px solid var(--border)}
+.leads-head-top{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.leads-head-filters{display:flex;align-items:center;justify-content:flex-end;gap:14px;flex-wrap:wrap}
+.filter-search{padding:7px 14px 7px 32px;border-radius:14px;border:1px solid var(--border2);background:rgba(255,255,255,0.02);color:var(--text);font-size:12px;font-family:inherit;outline:none;width:240px;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%2386868b'><path d='M11.7 10.3a6 6 0 1 0-1.4 1.4l3 3 1.4-1.4-3-3zM7 11a4 4 0 1 1 0-8 4 4 0 0 1 0 8z'/></svg>");background-repeat:no-repeat;background-position:10px center;background-size:14px;transition:all .15s}
+.filter-search:focus{border-color:rgba(218,41,28,0.5)}
+
+table{width:100%;border-collapse:collapse}
+thead th{text-align:left;padding:12px 16px;font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);border-bottom:1px solid var(--border);background:rgba(255,255,255,0.02);white-space:nowrap}
+tbody td{padding:14px 16px;font-size:13px;border-bottom:1px solid var(--border);vertical-align:middle}
+tbody tr:last-child td{border-bottom:none}
+tbody tr.priority{background:rgba(218,41,28,0.04)}
+
+.email{font-weight:600;color:var(--text)}
+.timestamp{font-size:12px;color:var(--text2);white-space:nowrap}
+
+.domain-cell{text-align:center}
+.domain-dot{display:inline-block;width:14px;height:14px;border-radius:50%;border:1px solid rgba(255,255,255,0.1)}
+.domain-dot.red{background:var(--red);border-color:var(--red)}
+.domain-dot.yellow{background:var(--orange);border-color:var(--orange)}
+.domain-dot.green{background:var(--green);border-color:var(--green)}
+.domain-dot.none{background:transparent;border-style:dashed}
+
+.score{font-weight:700;font-size:14px;font-variant-numeric:tabular-nums}
+.score.high{color:var(--green)}
+.score.mid{color:var(--orange)}
+.score.low{color:var(--red)}
+
+.status-select{padding:5px 10px;border-radius:10px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-size:11px;font-weight:600;letter-spacing:0.5px;font-family:inherit;cursor:pointer;outline:none}
+.status-select:focus{border-color:rgba(218,41,28,0.5)}
+
+.table-foot{padding:14px 24px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border);background:rgba(255,255,255,0.02)}
+.foot-info{font-size:12px;color:var(--text3)}
+
+/* ── MINT PANEL ── */
+.mint-wrap{display:grid;grid-template-columns:1fr 1fr;gap:32px}
+@media(max-width:900px){.mint-wrap{grid-template-columns:1fr}}
+.mint-title{font-size:24px;font-weight:700;margin-bottom:6px;letter-spacing:-0.01em}
+.mint-sub{font-size:13px;color:var(--text2);margin-bottom:22px;line-height:1.55}
+form.mint{display:flex;flex-direction:column;gap:14px}
+form.mint label{font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;display:block}
+form.mint input{width:100%;padding:12px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:var(--text);font-size:14px;font-family:inherit;outline:none}
+form.mint input:focus{border-color:rgba(218,41,28,0.5)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+button.primary{padding:14px;border-radius:12px;background:var(--red);color:#fff;font-size:13px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;border:none;cursor:pointer;font-family:inherit;margin-top:6px}
+button.primary:hover{filter:brightness(1.08)}
+.result{padding:22px;border:1px solid rgba(255,255,255,0.08);border-radius:16px;background:rgba(255,255,255,0.02);text-align:center}
+.qr{width:240px;height:240px;border-radius:12px;background:#fff;padding:12px;margin:14px auto;display:block}
+.url{font-size:12px;color:var(--text2);word-break:break-all;padding:12px;border:1px solid rgba(255,255,255,0.08);border-radius:10px;background:rgba(255,255,255,0.03);margin-top:12px;line-height:1.45;text-align:left}
+.qr-actions{display:flex;gap:10px;justify-content:center;margin-top:14px;align-items:center}
+.qr-actions button,.qr-actions a button{padding:9px 16px;font-size:11px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;border:1px solid rgba(255,255,255,0.12);background:none;color:var(--text);border-radius:18px;cursor:pointer;font-family:inherit}
+.qr-actions button:hover,.qr-actions a button:hover{border-color:rgba(255,255,255,0.3)}
+.ok{color:var(--green);font-size:12px;margin-top:8px;min-height:14px;font-weight:600}
+.placeholder{color:var(--text3);font-size:13px;padding:64px 32px;text-align:center;border:1px dashed rgba(255,255,255,0.08);border-radius:16px}
+.event-meta{font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:8px}
+.event-name{font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px}
+
+@media(max-width:900px){
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .bar-row{grid-template-columns:120px 1fr 60px}
+  table{font-size:12px}
+  thead th{padding:10px 10px}
+  tbody td{padding:12px 10px}
+}
+@media(max-width:640px){
+  .dashboard{padding:20px 14px 60px}
+  .stats{grid-template-columns:1fr 1fr;gap:10px}
+  .stat-value{font-size:24px}
+  .bar-row{grid-template-columns:100px 1fr 50px;gap:10px}
+  .bar-domain{font-size:12px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <svg class="brand-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 487.6 55" aria-label="Fortinet"><path fill="currentColor" d="M279.9 11.7V0h13.4v54.8h-13.4V11.7zM220.9 0h51.7v11.8h-24.3v43.1H235V11.8h-14.1V0zm266.7 0v11.8h-24.3v43.1H450V11.8h-14.1V0h51.7zM0 0h58v11.8H13.4v11.7h38v11.8h-38v19.5H0V0zm374.5 0h54v11.8h-40.6v9.8h33.3v11.8h-33.3v9.8h41.3V55h-54.7V0zm-10.3 15.5v39.3h-13.4V15.5c0-2.1-1.6-3.7-3.7-3.7h-30v43.1h-13.4V0h45c8.5 0 15.5 7 15.5 15.5zM200.3 0h-45.7v54.8H168V35.3h30c1.6.1 2.9 1.4 2.9 3v16.6h13.4V38.1c0-2.9-1.6-5.4-4-6.8 2.9-2.7 4.7-6.6 4.7-10.8v-5.8c.1-8.1-6.5-14.7-14.7-14.7zm1.4 20.5c0 1.6-1.3 3-3 3H168V11.8h30.7c1.6 0 3 1.3 3 3v5.7z"/><path fill="#da291c" d="M144.2 20.4v14.2H122V20.4h22.2zM93.9 54.8H116V40.6H93.9v14.2zm50.3-42.9c0-6.6-5.3-11.9-11.9-11.9h-10.2v14.2h22.1v-2.3zM93.9 0v14.2H116V0H93.9zM65.7 20.4v14.2h22.1V20.4H65.7zM122 54.8h10.2c6.6 0 11.9-5.3 11.9-11.9v-2.3H122v14.2zM65.7 42.9c0 6.6 5.3 11.9 11.9 11.9h10.2V40.6H65.7v2.3zm0-31v2.3h22.1V0H77.6C71 0 65.7 5.3 65.7 11.9z"/></svg>
+      <div class="brand-sep"></div>
+      <div class="topbar-title">Sales Cloud Assessment · Admin</div>
+    </div>
+    <div class="topbar-right">
+      <form method="POST" action="/admin/logout" style="margin:0"><button class="logout" type="submit">Sign out</button></form>
+    </div>
+  </div>
+
+  <main class="dashboard">
+
+    <!-- HEADER -->
+    <div class="page-header">
+      <div class="page-eyebrow">Security Maturity Assessment</div>
+      <h1 class="page-title">Admin Console</h1>
+      <p class="page-sub">Triage the prospects who walked through the assessment, then mint event links for the next booth.</p>
+    </div>
+
+    <!-- TABS -->
+    <div class="tabs">
+      <button class="tab active" data-tab="dashboard">Dashboard</button>
+      <button class="tab" data-tab="mint">Mint</button>
+    </div>
+
+    <!-- ── DASHBOARD PANEL ── -->
+    <section class="panel active" id="panel-dashboard">
+
+      <!-- STATS -->
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-label">Total Submissions</div>
+          <div class="stat-value" id="statTotal">—</div>
+          <div class="stat-trend">All events</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Avg Posture</div>
+          <div class="stat-value" id="statAvg">—</div>
+          <div class="stat-trend">Across cohort</div>
+        </div>
+        <div class="stat alert">
+          <div class="stat-label">High Priority</div>
+          <div class="stat-value" id="statHigh">—</div>
+          <div class="stat-trend">Significant gaps</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Meetings Booked</div>
+          <div class="stat-value" id="statMeetings">—</div>
+          <div class="stat-trend">Follow-ups secured</div>
+        </div>
+      </div>
+
+      <!-- BREAKDOWN -->
+      <section class="breakdown">
+        <div class="section-head">
+          <div class="section-title">Posture by Domain</div>
+          <div class="section-meta" id="postureMeta"></div>
+        </div>
+        <div class="bar-chart" id="barChart"></div>
+        <div class="legend">
+          <div class="legend-item"><span class="dot green"></span>Strong</div>
+          <div class="legend-item"><span class="dot yellow"></span>Partial</div>
+          <div class="legend-item"><span class="dot red"></span>At Risk</div>
+        </div>
+      </section>
+
+      <!-- LEADS TABLE -->
+      <section class="leads">
+        <div class="leads-head">
+          <div class="leads-head-top">
+            <div class="section-title" id="leadsTitle">Recent Leads</div>
+          </div>
+          <div class="leads-head-filters">
+            <input class="filter-search" id="leadSearch" placeholder="Search email">
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Email</th>
+              <th>Submitted</th>
+              <th>Network</th>
+              <th>App</th>
+              <th>Cloud</th>
+              <th>Service</th>
+              <th>Score</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="leadsBody"></tbody>
+        </table>
+
+        <div class="table-foot">
+          <div class="foot-info" id="leadsCount"></div>
+        </div>
+      </section>
+
+    </section>
+
+    <!-- ── MINT PANEL ── -->
+    <section class="panel" id="panel-mint">
+      <div class="mint-wrap">
+        <div>
+          <div class="mint-title">Mint event token</div>
+          <div class="mint-sub">Generates a per-event signed link valid between the start and end times. Encode the returned URL into a QR for the booth — the same token can be scanned by multiple attendees within the window.</div>
+          <form class="mint" id="mintForm">
+            <div><label>Event ID</label><input name="event_id" placeholder="aws-summit-mtl-2026" required></div>
+            <div><label>Event name</label><input name="event_name" placeholder="AWS Summit Montréal 2026"></div>
+            <div><label>Presenter ID (optional)</label><input name="presenter_id" placeholder="ajammes"></div>
+            <div class="row">
+              <div><label>Starts</label><input type="datetime-local" name="nbf" required></div>
+              <div><label>Ends</label><input type="datetime-local" name="exp" required></div>
+            </div>
+            <div><label>Max scans (optional)</label><input type="number" name="max_uses" min="0" placeholder="0 = unlimited within window"></div>
+            <button class="primary" type="submit">Mint &amp; show QR</button>
+          </form>
+        </div>
+        <div>
+          <div id="placeholder" class="placeholder">Mint a token to see the QR and shareable URL.</div>
+          <div id="result" class="result" hidden>
+            <div class="event-meta">Event token</div>
+            <div class="event-name" id="evName"></div>
+            <img id="qr" class="qr" alt="event QR code">
+            <div class="url" id="url"></div>
+            <div class="qr-actions">
+              <button type="button" onclick="copyUrl()">Copy URL</button>
+              <a id="download" download="event-qr.png"><button type="button">Download QR</button></a>
+            </div>
+            <div class="ok" id="ok"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+// ── Tab switching ─────────────────────────────────────────────────────
+(function(){
+  const tabs=document.querySelectorAll('.tab');
+  const panels=document.querySelectorAll('.panel');
+  tabs.forEach(t=>t.addEventListener('click',()=>{
+    tabs.forEach(x=>x.classList.remove('active'));
+    panels.forEach(p=>p.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('panel-'+t.dataset.tab).classList.add('active');
+  }));
+})();
+
+// ── Dashboard ─────────────────────────────────────────────────────────
+const DOMAINS=[
+  {id:'network',label:'Network Security'},
+  {id:'app',label:'Application Security'},
+  {id:'cnapp',label:'Cloud Visibility'},
+  {id:'sspm',label:'Service Visibility'}
+];
+const STATUS_OPTIONS=[
+  {v:'new',label:'New'},
+  {v:'contacted',label:'Contacted'},
+  {v:'meeting_booked',label:'Meeting Booked'},
+  {v:'closed',label:'Closed'}
+];
+const MAX_SCORE=8; // 4 scenarios * 2
+
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+function scoreClass(pct){return pct>=80?'high':pct>=50?'mid':'low';}
+
+function fmtTime(iso){
+  try{
+    const d=new Date(iso);
+    return d.toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+  }catch(e){return iso;}
+}
+
+async function loadStats(){
+  const r=await fetch('/admin/stats',{credentials:'same-origin'});
+  if(!r.ok)return;
+  const s=await r.json();
+  document.getElementById('statTotal').textContent=s.totalSubmissions;
+  document.getElementById('statAvg').textContent=s.avgPosturePct+'%';
+  document.getElementById('statHigh').textContent=s.highPriority;
+  document.getElementById('statMeetings').textContent=s.meetingsBooked;
+  document.getElementById('postureMeta').textContent=s.totalSubmissions+' submissions';
+
+  const labels={}; DOMAINS.forEach(d=>labels[d.id]=d.label);
+  const chart=document.getElementById('barChart');
+  chart.innerHTML='';
+  (s.postureByDomain||[]).forEach(d=>{
+    const total=(d.red||0)+(d.yellow||0)+(d.green||0);
+    const pc=n=>total?Math.round(n/total*100):0;
+    const row=document.createElement('div');
+    row.className='bar-row';
+    row.innerHTML=
+      '<div class="bar-domain">'+esc(labels[d.scenario]||d.scenario)+'</div>'+
+      '<div class="bar-track">'+
+        '<div class="bar-seg green" style="width:'+pc(d.green)+'%"></div>'+
+        '<div class="bar-seg yellow" style="width:'+pc(d.yellow)+'%"></div>'+
+        '<div class="bar-seg red" style="width:'+pc(d.red)+'%"></div>'+
+      '</div>'+
+      '<div class="bar-counts">'+
+        '<span class="bar-count"><span class="dot green"></span>'+(d.green||0)+'</span>'+
+        '<span class="bar-count"><span class="dot yellow"></span>'+(d.yellow||0)+'</span>'+
+        '<span class="bar-count"><span class="dot red"></span>'+(d.red||0)+'</span>'+
+      '</div>';
+    chart.appendChild(row);
+  });
+}
+
+function domainCell(d){
+  if(!d||d.score<0||!d.color){
+    return '<td class="domain-cell"><span class="domain-dot none" title="Not answered"></span></td>';
+  }
+  return '<td class="domain-cell"><span class="domain-dot '+esc(d.color)+'" title="'+esc(d.color)+'"></span></td>';
+}
+
+function statusSelect(lead){
+  let opts='';
+  STATUS_OPTIONS.forEach(o=>{
+    opts+='<option value="'+o.v+'"'+(lead.status===o.v?' selected':'')+'>'+o.label+'</option>';
+  });
+  return '<select class="status-select" data-id="'+lead.submissionId+'">'+opts+'</select>';
+}
+
+function renderLeads(leads){
+  const body=document.getElementById('leadsBody');
+  const count=document.getElementById('leadsCount');
+  const title=document.getElementById('leadsTitle');
+  body.innerHTML='';
+  if(!leads.length){
+    body.innerHTML='<tr><td colspan="8" style="padding:32px 16px;text-align:center;color:var(--text3);font-size:13px">No leads match.</td></tr>';
+    count.textContent='No leads';
+    title.textContent='Recent Leads';
+    return;
+  }
+  title.textContent='Recent Leads · '+leads.length+' shown';
+  count.textContent='Showing '+leads.length+' lead'+(leads.length===1?'':'s');
+  leads.forEach(l=>{
+    const dm=l.domains||{};
+    const pct=Math.round((l.totalScore||0)/MAX_SCORE*100);
+    const priority=l.band==='Significant Gaps';
+    const tr=document.createElement('tr');
+    if(priority)tr.className='priority';
+    tr.innerHTML=
+      '<td><div class="email">'+esc(l.email)+'</div></td>'+
+      '<td><div class="timestamp">'+esc(fmtTime(l.submittedAt))+'</div></td>'+
+      domainCell(dm.network)+domainCell(dm.app)+domainCell(dm.cnapp)+domainCell(dm.sspm)+
+      '<td><span class="score '+scoreClass(pct)+'">'+pct+'%</span></td>'+
+      '<td>'+statusSelect(l)+'</td>';
+    body.appendChild(tr);
+  });
+  body.querySelectorAll('.status-select').forEach(sel=>{
+    sel.addEventListener('change',async()=>{
+      const id=Number(sel.dataset.id);
+      const status=sel.value;
+      const prev=sel.dataset.prev||status;
+      const r=await fetch('/admin/leads/status',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        credentials:'same-origin',
+        body:JSON.stringify({submission_id:id,status:status})
+      });
+      if(!r.ok){alert('Update failed: '+r.status);sel.value=prev;return;}
+      sel.dataset.prev=status;
+      // Refresh stats (meetings booked / high priority unaffected, but cheap) and rows.
+      loadStats();
+      loadLeads();
+    });
+  });
+}
+
+let leadSearchTimer=null;
+async function loadLeads(){
+  const q=document.getElementById('leadSearch').value.trim();
+  const r=await fetch('/admin/leads?q='+encodeURIComponent(q),{credentials:'same-origin'});
+  if(!r.ok)return;
+  renderLeads(await r.json());
+}
+
+document.getElementById('leadSearch').addEventListener('input',()=>{
+  clearTimeout(leadSearchTimer);
+  leadSearchTimer=setTimeout(loadLeads,250);
+});
+
+loadStats();
+loadLeads();
+
+// ── Mint (ported from portal.html, unchanged behavior) ────────────────
+document.getElementById('mintForm').addEventListener('submit', async function(e){
+  e.preventDefault();
+  const f=new FormData(e.target);
+  const toIso=v=>v?new Date(v).toISOString():'';
+  const payload={
+    event_id:(f.get('event_id')||'').trim(),
+    event_name:(f.get('event_name')||'').trim(),
+    presenter_id:(f.get('presenter_id')||'').trim(),
+    nbf:toIso(f.get('nbf')),
+    exp:toIso(f.get('exp')),
+    max_uses:Number(f.get('max_uses')||0)
+  };
+  const r=await fetch('/admin/mint',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),credentials:'same-origin'});
+  if(!r.ok){alert('Mint failed: '+r.status+' '+await r.text());return;}
+  const data=await r.json();
+  const url=data.url||data.token;
+  document.getElementById('evName').textContent=payload.event_name||payload.event_id;
+  document.getElementById('url').textContent=url;
+  const qrSrc='/admin/qr?data='+encodeURIComponent(url);
+  document.getElementById('qr').src=qrSrc;
+  document.getElementById('download').href=qrSrc;
+  document.getElementById('result').hidden=false;
+  document.getElementById('placeholder').hidden=true;
+});
+async function copyUrl(){
+  const txt=document.getElementById('url').textContent;
+  try{await navigator.clipboard.writeText(txt);showOk('Copied');}catch(e){showOk('Select to copy');}
+}
+function showOk(m){const o=document.getElementById('ok');o.textContent=m;setTimeout(()=>{o.textContent='';},1800);}
+</script>
+</body>
+</html>

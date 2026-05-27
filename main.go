@@ -21,7 +21,7 @@ var deckMobile []byte
 
 // portal/ holds the admin password portal templates. It's intentionally
 // separate from the existing /admin static Pages mockup at the repo root.
-//go:embed portal/login.html portal/portal.html
+//go:embed portal/login.html portal/admin.html
 var portalFS embed.FS
 
 //go:embed migrations/*.sql
@@ -46,7 +46,7 @@ func main() {
 	}
 
 	adminLoginTpl = template.Must(template.ParseFS(portalFS, "portal/login.html"))
-	adminPortalTpl = template.Must(template.ParseFS(portalFS, "portal/portal.html"))
+	adminPortalTpl = template.Must(template.ParseFS(portalFS, "portal/admin.html"))
 
 	var err error
 	db, err = sql.Open("pgx", dbURL)
@@ -75,6 +75,9 @@ func main() {
 	mux.HandleFunc("/admin/logout", adminLogout)
 	mux.HandleFunc("/admin/mint", adminMint)
 	mux.HandleFunc("/admin/qr", adminQR)
+	mux.HandleFunc("/admin/stats", adminStatsHandler)
+	mux.HandleFunc("/admin/leads", adminLeadsHandler)
+	mux.HandleFunc("/admin/leads/status", adminLeadStatusHandler)
 
 	mux.HandleFunc("/", serveDeck)
 
