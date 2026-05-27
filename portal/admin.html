@@ -517,6 +517,7 @@ function renderLeads(leads){
       if(!r.ok){alert('Remove failed: '+r.status);return;}
       loadStats();
       loadLeads();
+      loadEvents();
     });
   });
 }
