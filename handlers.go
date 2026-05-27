@@ -38,6 +38,9 @@ var (
 	allowedScenarios = map[string]bool{
 		"network": true, "app": true, "cnapp": true, "sspm": true,
 	}
+	// scenarioOrder is the deck's scenario order (see the scenarios array in
+	// security-maturity-assessment-browser.html): Network, App, Cloud, Service.
+	scenarioOrder = []string{"network", "app", "cnapp", "sspm"}
 	allowedColors = map[string]bool{"red": true, "yellow": true, "green": true}
 
 	emailRe    = regexp.MustCompile(`^[^@\s]{1,128}@[^@\s]{1,128}\.[^@\s]{1,32}$`)
@@ -460,6 +463,387 @@ func adminMint(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// ── lead dashboard ───────────────────────────────────────────────────
+//
+// Scoring mirrors the deck's showResults() in
+// security-maturity-assessment-browser.html: four scenarios, each scored
+// 0/1/2 (red/yellow/green), so the max is 8 and pct = round(total/8*100).
+// Bands (in priority order):
+//   pct>=80              -> "Strong Posture"
+//   reds==0              -> "Getting There"
+//   reds>=3              -> "Significant Gaps"  (high priority / lowest band)
+//   otherwise            -> "Mixed Posture"
+// Per-domain scores come from the picks table (the unambiguous source of
+// truth), using the latest pick per scenario per session.
+
+const assessmentMaxScore = 8 // 4 scenarios * max score 2
+
+// leadStatuses is the set of valid lead_status.status values.
+var leadStatuses = map[string]bool{
+	"new": true, "contacted": true, "meeting_booked": true, "closed": true,
+}
+
+// postureBand returns the band label the deck would show for a given total
+// score and red count. pct is total/assessmentMaxScore as a percentage.
+func postureBand(total, reds int) string {
+	pct := total * 100 / assessmentMaxScore
+	switch {
+	case pct >= 80:
+		return "Strong Posture"
+	case reds == 0:
+		return "Getting There"
+	case reds >= 3:
+		return "Significant Gaps"
+	default:
+		return "Mixed Posture"
+	}
+}
+
+type domainPosture struct {
+	Scenario string `json:"scenario"`
+	Red      int    `json:"red"`
+	Yellow   int    `json:"yellow"`
+	Green    int    `json:"green"`
+}
+
+type adminStats struct {
+	TotalSubmissions int             `json:"totalSubmissions"`
+	AvgPosturePct    int             `json:"avgPosturePct"`
+	HighPriority     int             `json:"highPriority"`
+	MeetingsBooked   int             `json:"meetingsBooked"`
+	PostureByDomain  []domainPosture `json:"postureByDomain"`
+}
+
+func adminStatsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !adminAuthed(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	stats := adminStats{PostureByDomain: []domainPosture{}}
+
+	if err := db.QueryRowContext(ctx,
+		`SELECT count(*) FROM submissions`).Scan(&stats.TotalSubmissions); err != nil {
+		log.Printf("stats submissions: %v", err)
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+
+	if err := db.QueryRowContext(ctx,
+		`SELECT count(*) FROM lead_status WHERE status = 'meeting_booked'`).Scan(&stats.MeetingsBooked); err != nil {
+		log.Printf("stats meetings: %v", err)
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Per-domain red/yellow/green counts, using the latest pick per scenario
+	// per session so a session can't double-count a domain.
+	rows, err := db.QueryContext(ctx, `
+		WITH latest AS (
+			SELECT DISTINCT ON (session_id, scenario)
+				session_id, scenario, color
+			FROM picks
+			ORDER BY session_id, scenario, picked_at DESC
+		)
+		SELECT scenario,
+			count(*) FILTER (WHERE color = 'red')    AS red,
+			count(*) FILTER (WHERE color = 'yellow') AS yellow,
+			count(*) FILTER (WHERE color = 'green')  AS green
+		FROM latest
+		GROUP BY scenario`)
+	if err != nil {
+		log.Printf("stats posture: %v", err)
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+	byScenario := map[string]domainPosture{}
+	for rows.Next() {
+		var d domainPosture
+		if err := rows.Scan(&d.Scenario, &d.Red, &d.Yellow, &d.Green); err != nil {
+			log.Printf("stats posture scan: %v", err)
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		byScenario[d.Scenario] = d
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("stats posture rows: %v", err)
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	// Emit in deck order, including any scenario with no picks yet.
+	for _, id := range scenarioOrder {
+		d, ok := byScenario[id]
+		if !ok {
+			d = domainPosture{Scenario: id}
+		}
+		stats.PostureByDomain = append(stats.PostureByDomain, d)
+	}
+
+	// Per-session total score + red count, joined to submissions so we only
+	// count sessions that actually submitted. Used for avg posture and the
+	// high-priority (lowest band) count.
+	srows, err := db.QueryContext(ctx, `
+		WITH latest AS (
+			SELECT DISTINCT ON (p.session_id, p.scenario)
+				p.session_id, p.scenario, p.score, p.color
+			FROM picks p
+			JOIN submissions s ON s.session_id = p.session_id
+			ORDER BY p.session_id, p.scenario, p.picked_at DESC
+		)
+		SELECT session_id,
+			sum(score)::int                            AS total,
+			count(*) FILTER (WHERE color = 'red')::int AS reds
+		FROM latest
+		GROUP BY session_id`)
+	if err != nil {
+		log.Printf("stats sessions: %v", err)
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	defer srows.Close()
+	var pctSum, pctCount, highPriority int
+	for srows.Next() {
+		var sid string
+		var total, reds int
+		if err := srows.Scan(&sid, &total, &reds); err != nil {
+			log.Printf("stats sessions scan: %v", err)
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		pct := total * 100 / assessmentMaxScore
+		pctSum += pct
+		pctCount++
+		if postureBand(total, reds) == "Significant Gaps" {
+			highPriority++
+		}
+	}
+	if err := srows.Err(); err != nil {
+		log.Printf("stats sessions rows: %v", err)
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if pctCount > 0 {
+		stats.AvgPosturePct = pctSum / pctCount
+	}
+	stats.HighPriority = highPriority
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(stats)
+}
+
+type leadDomain struct {
+	Score int    `json:"score"` // 0/1/2, -1 if not answered
+	Color string `json:"color"` // red|yellow|green|"" if not answered
+}
+
+type leadRow struct {
+	SubmissionID int64                 `json:"submissionId"`
+	Email        string                `json:"email"`
+	SubmittedAt  time.Time             `json:"submittedAt"`
+	Domains      map[string]leadDomain `json:"domains"` // keyed by scenario id
+	TotalScore   int                   `json:"totalScore"`
+	Band         string                `json:"band"`
+	Status       string                `json:"status"`
+}
+
+func adminLeadsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !adminAuthed(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if len(q) > 256 {
+		q = q[:256]
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	// One row per submission, with the lead status (default 'new') and the
+	// session so we can attach per-domain picks. $1 is the email filter:
+	// empty string matches everything ('%%').
+	rows, err := db.QueryContext(ctx, `
+		SELECT s.id, s.email, s.submitted_at, s.session_id,
+			COALESCE(ls.status, 'new') AS status
+		FROM submissions s
+		JOIN sessions sess ON sess.id = s.session_id
+		LEFT JOIN lead_status ls ON ls.submission_id = s.id
+		WHERE s.email ILIKE '%' || $1 || '%'
+		ORDER BY s.submitted_at DESC
+		LIMIT 500`, q)
+	if err != nil {
+		log.Printf("leads query: %v", err)
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	leads := []leadRow{}
+	sessionIDs := []string{}
+	idxBySession := map[string]int{}
+	for rows.Next() {
+		var l leadRow
+		var sessionID string
+		if err := rows.Scan(&l.SubmissionID, &l.Email, &l.SubmittedAt, &sessionID, &l.Status); err != nil {
+			log.Printf("leads scan: %v", err)
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		l.Domains = map[string]leadDomain{}
+		for _, id := range scenarioOrder {
+			l.Domains[id] = leadDomain{Score: -1}
+		}
+		idxBySession[sessionID] = len(leads)
+		sessionIDs = append(sessionIDs, sessionID)
+		leads = append(leads, l)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("leads rows: %v", err)
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Attach per-domain picks for just the sessions we loaded. We re-apply the
+	// same email filter in a subquery (rather than binding a Go slice as a SQL
+	// array) so this stays a plain parameterised query; rows for sessions we
+	// didn't load are ignored via idxBySession below.
+	if len(sessionIDs) > 0 {
+		prows, err := db.QueryContext(ctx, `
+			SELECT DISTINCT ON (p.session_id, p.scenario)
+				p.session_id, p.scenario, p.score, p.color
+			FROM picks p
+			WHERE p.session_id IN (
+				SELECT s.session_id FROM submissions s
+				WHERE s.email ILIKE '%' || $1 || '%'
+			)
+			ORDER BY p.session_id, p.scenario, p.picked_at DESC`, q)
+		if err != nil {
+			log.Printf("leads picks: %v", err)
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		defer prows.Close()
+		for prows.Next() {
+			var sessionID, scenario, color string
+			var score int
+			if err := prows.Scan(&sessionID, &scenario, &score, &color); err != nil {
+				log.Printf("leads picks scan: %v", err)
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return
+			}
+			i, ok := idxBySession[sessionID]
+			if !ok {
+				continue
+			}
+			if _, known := leads[i].Domains[scenario]; !known {
+				continue
+			}
+			leads[i].Domains[scenario] = leadDomain{Score: score, Color: color}
+		}
+		if err := prows.Err(); err != nil {
+			log.Printf("leads picks rows: %v", err)
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// Derive total score and band per lead from the attached domains.
+	for i := range leads {
+		total, reds, answered := 0, 0, 0
+		for _, id := range scenarioOrder {
+			d := leads[i].Domains[id]
+			if d.Score < 0 {
+				continue
+			}
+			answered++
+			total += d.Score
+			if d.Color == "red" {
+				reds++
+			}
+		}
+		leads[i].TotalScore = total
+		if answered > 0 {
+			leads[i].Band = postureBand(total, reds)
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(leads)
+}
+
+type leadStatusRequest struct {
+	SubmissionID int64  `json:"submission_id"`
+	Status       string `json:"status"`
+	Note         string `json:"note"`
+}
+
+func adminLeadStatusHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !adminAuthed(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	var req leadStatusRequest
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req); err != nil {
+		http.Error(w, "bad json", http.StatusBadRequest)
+		return
+	}
+	if req.SubmissionID <= 0 {
+		http.Error(w, "submission_id required", http.StatusBadRequest)
+		return
+	}
+	if !leadStatuses[req.Status] {
+		http.Error(w, "invalid status", http.StatusBadRequest)
+		return
+	}
+	if len(req.Note) > 2000 {
+		http.Error(w, "note too long", http.StatusBadRequest)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	// NULLIF keeps an empty note as SQL NULL rather than ''.
+	res, err := db.ExecContext(ctx, `
+		INSERT INTO lead_status (submission_id, status, note, updated_at)
+		VALUES ($1, $2, NULLIF($3, ''), now())
+		ON CONFLICT (submission_id) DO UPDATE
+		SET status = EXCLUDED.status,
+			note = EXCLUDED.note,
+			updated_at = now()`,
+		req.SubmissionID, req.Status, req.Note)
+	if err != nil {
+		log.Printf("lead status upsert: %v", err)
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		// Foreign key satisfied but no row touched should not happen; treat as
+		// a bad submission id.
+		http.Error(w, "unknown submission", http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func adminQR(w http.ResponseWriter, r *http.Request) {
