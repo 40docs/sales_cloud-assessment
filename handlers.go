@@ -699,12 +699,16 @@ func adminStatsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Per-domain red/yellow/green counts, using the latest pick per scenario
-	// per session so a session can't double-count a domain.
+	// per session so a session can't double-count a domain. Joined to
+	// submissions so only sessions that actually submitted count — otherwise
+	// abandoned sessions (picks made, never submitted) skew the chart and it
+	// shows values even when there are zero leads.
 	rows, err := db.QueryContext(ctx, `
 		WITH latest AS (
 			SELECT DISTINCT ON (p.session_id, p.scenario)
 				p.session_id, p.scenario, p.color
 			FROM picks p
+			JOIN submissions s ON s.session_id = p.session_id
 			JOIN sessions sess ON sess.id = p.session_id
 			WHERE (sess.event_id = $1 OR $1 = '')
 			  AND (COALESCE(sess.presenter_id,'') = $2 OR $2 = '')
