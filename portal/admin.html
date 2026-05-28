@@ -278,14 +278,14 @@ button.primary:hover{filter:brightness(1.08)}
       <div class="mint-wrap">
         <div>
           <div class="mint-title">Mint event token</div>
-          <div class="mint-sub">Generates a per-event signed link valid between the start and end times. Encode the returned URL into a QR for the booth — the same token can be scanned by multiple attendees within the window.</div>
+          <div class="mint-sub">Generates a per-event signed link valid across the date range you pick (full days, local midnight to midnight). Encode the returned URL into a QR for the booth — the same token can be scanned by multiple attendees within the window.</div>
           <form class="mint" id="mintForm">
             <div><label>Event ID</label><input name="event_id" placeholder="aws-summit-mtl-2026" required></div>
             <div><label>Event name</label><input name="event_name" placeholder="AWS Summit Montréal 2026"></div>
             <div><label>Presenter ID (optional)</label><input name="presenter_id" placeholder="ajammes"></div>
             <div class="row">
-              <div><label>Starts</label><input type="datetime-local" name="nbf" required></div>
-              <div><label>Ends</label><input type="datetime-local" name="exp" required></div>
+              <div><label>Starts</label><input type="date" name="nbf" required></div>
+              <div><label>Ends</label><input type="date" name="exp" required></div>
             </div>
             <button class="primary" type="submit">Mint &amp; show QR</button>
           </form>
@@ -576,13 +576,17 @@ loadEvents().then(()=>{loadStats();loadLeads();});
 document.getElementById('mintForm').addEventListener('submit', async function(e){
   e.preventDefault();
   const f=new FormData(e.target);
-  const toIso=v=>v?new Date(v).toISOString():'';
+  // Date inputs hand us YYYY-MM-DD. Anchor "Starts" at local midnight and
+  // "Ends" at local end-of-day so the link covers the full picked days,
+  // then serialise to UTC ISO for the server (it parses RFC3339).
+  const startIso=v=>v?new Date(v+'T00:00:00').toISOString():'';
+  const endIso  =v=>v?new Date(v+'T23:59:59').toISOString():'';
   const payload={
     event_id:(f.get('event_id')||'').trim(),
     event_name:(f.get('event_name')||'').trim(),
     presenter_id:(f.get('presenter_id')||'').trim(),
-    nbf:toIso(f.get('nbf')),
-    exp:toIso(f.get('exp'))
+    nbf:startIso(f.get('nbf')),
+    exp:endIso(f.get('exp'))
   };
   const r=await fetch('/admin/mint',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),credentials:'same-origin'});
   if(!r.ok){alert('Mint failed: '+r.status+' '+await r.text());return;}
