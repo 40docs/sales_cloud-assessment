@@ -172,9 +172,26 @@ func serveDeck(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "this assessment requires a valid link from the event QR code", http.StatusUnauthorized)
 		return
 	}
-	if _, err := parseSessionToken(c.Value); err != nil {
+	sess, err := parseSessionToken(c.Value)
+	if err != nil {
 		http.Error(w, "your session has expired — re-scan the event QR code", http.StatusUnauthorized)
 		return
+	}
+	// If this session already produced a submission, a fresh page load means a
+	// new visitor — booth staff hit refresh instead of "Retake". Rotate to a new
+	// session so their picks/scores can't blend into the previous person's lead.
+	// Fail open: never block the booth if the check or rotation hiccups.
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+	var submitted bool
+	if err := db.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM submissions WHERE session_id = $1)`,
+		sess.SessionID).Scan(&submitted); err != nil {
+		log.Printf("serve deck submission check: %v", err)
+	} else if submitted {
+		if err := rotateSession(ctx, w, r, sess); err != nil {
+			log.Printf("serve deck rotate: %v", err)
+		}
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -301,12 +318,36 @@ func recordEvent(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// rotateSession mints a fresh session for the same event/presenter as sess,
+// inserts it, and sets the wt_sess cookie on w. The new session inherits the
+// original link's expiry (carried on the session token), so rotation can never
+// extend access past the event window. Shared by the explicit /api/session/new
+// endpoint and by serveDeck when a reload lands on an already-submitted session.
+func rotateSession(ctx context.Context, w http.ResponseWriter, r *http.Request, sess *sessClaims) error {
+	sid := uuid.NewString()
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO sessions(id, event_id, presenter_id, ua, ip_hash, started_at)
+		 VALUES ($1,$2,$3,$4,$5,now())`,
+		sid, sess.EventID, sess.PresenterID, truncate(r.UserAgent(), 256), clientIPHash(r)); err != nil {
+		return err
+	}
+	exp := sess.ExpiresAt.Time
+	tok, err := mintSessionToken(sid, sess.EventID, sess.PresenterID, exp)
+	if err != nil {
+		return err
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name: sessCookieName, Value: tok, Path: "/",
+		Expires: exp, HttpOnly: true, Secure: cookieSecure, SameSite: http.SameSiteLaxMode,
+	})
+	return nil
+}
+
 // sessionNewHandler rotates the caller to a brand-new session for the same
 // event/presenter as their current (valid) session. The deck calls it from the
 // "Retake Assessment" path so each run — a new passer-by on a shared iPad, or
 // the same person going again — gets its own picks and can't blend scores with
-// the previous run. Bounded by the original link's expiry, which rides on the
-// session token, so it can't be used to mint sessions past the event window.
+// the previous run.
 func sessionNewHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -322,27 +363,13 @@ func sessionNewHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "your session has expired — re-scan the event QR code", http.StatusUnauthorized)
 		return
 	}
-	exp := sess.ExpiresAt.Time
-	sid := uuid.NewString()
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()
-	if _, err := db.ExecContext(ctx,
-		`INSERT INTO sessions(id, event_id, presenter_id, ua, ip_hash, started_at)
-		 VALUES ($1,$2,$3,$4,$5,now())`,
-		sid, sess.EventID, sess.PresenterID, truncate(r.UserAgent(), 256), clientIPHash(r)); err != nil {
-		log.Printf("session rotate insert: %v", err)
+	if err := rotateSession(ctx, w, r, sess); err != nil {
+		log.Printf("session rotate: %v", err)
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	tok, err := mintSessionToken(sid, sess.EventID, sess.PresenterID, exp)
-	if err != nil {
-		http.Error(w, "server error", http.StatusInternalServerError)
-		return
-	}
-	http.SetCookie(w, &http.Cookie{
-		Name: sessCookieName, Value: tok, Path: "/",
-		Expires: exp, HttpOnly: true, Secure: cookieSecure, SameSite: http.SameSiteLaxMode,
-	})
 	w.WriteHeader(http.StatusNoContent)
 }
 
