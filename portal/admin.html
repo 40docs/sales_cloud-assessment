@@ -508,7 +508,7 @@ function renderLeads(leads){
   });
   body.querySelectorAll('.lead-remove').forEach(btn=>{
     btn.addEventListener('click',async()=>{
-      if(!confirm('Remove this lead? This permanently deletes the session (its picks + submission).'))return;
+      if(!confirm('Remove this lead? This permanently deletes their submission and assessment answers.'))return;
       const id=Number(btn.dataset.id);
       const r=await fetch('/admin/leads/delete',{
         method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',

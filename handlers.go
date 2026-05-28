@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -1106,16 +1107,45 @@ func adminLeadDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	res, err := db.ExecContext(ctx, `
-		DELETE FROM sessions
-		WHERE id = (SELECT session_id FROM submissions WHERE id = $1)`, req.SubmissionID)
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		log.Printf("lead delete begin: %v", err)
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	// Remove only this lead's submission (its lead_status cascades), and capture
+	// the session so we can clean it up too. Deleting the session directly would
+	// take any sibling submissions on a shared session down with it — the
+	// collateral we're avoiding here.
+	var sessionID string
+	err = tx.QueryRowContext(ctx,
+		`DELETE FROM submissions WHERE id = $1 RETURNING session_id`, req.SubmissionID).Scan(&sessionID)
+	if errors.Is(err, sql.ErrNoRows) {
+		http.Error(w, "unknown submission", http.StatusNotFound)
+		return
+	}
 	if err != nil {
 		log.Printf("lead delete: %v", err)
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		http.Error(w, "unknown submission", http.StatusNotFound)
+
+	// Drop the session (and its picks/phase_events) only once no submission still
+	// references it. Normal one-lead-per-session data gets a full clean purge;
+	// a legacy shared session keeps its other leads intact.
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM sessions WHERE id = $1
+		   AND NOT EXISTS (SELECT 1 FROM submissions WHERE session_id = $1)`, sessionID); err != nil {
+		log.Printf("lead delete session cleanup: %v", err)
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		log.Printf("lead delete commit: %v", err)
+		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
