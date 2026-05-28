@@ -129,12 +129,12 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
 .btn-submit:active{filter:brightness(1.1);transform:scale(0.98)}
 .capture-ok{display:none;font-size:14px;color:var(--green);font-weight:600;margin-top:14px}
 .capture-ok.show{display:block}
-.capture-extras{max-width:520px;margin:18px auto 4px;display:flex;flex-direction:column;gap:10px;text-align:left}
+.capture-extras{max-width:520px;margin:14px auto 0;display:flex;flex-direction:column;gap:8px;text-align:left}
 .capture-extras-title{font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text2);text-align:center;margin-bottom:4px}
 .capture-extras input,.capture-extras textarea{width:100%;box-sizing:border-box;padding:11px 14px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:var(--text);font-size:14px;font-family:inherit;outline:none;transition:border-color .2s}
 .capture-extras input:focus,.capture-extras textarea:focus{border-color:rgba(218,41,28,0.5)}
 .capture-extras input::placeholder,.capture-extras textarea::placeholder{color:var(--text3)}
-.capture-extras textarea{resize:vertical;min-height:78px;line-height:1.45}
+.capture-extras textarea{resize:vertical;min-height:60px;line-height:1.4}
 .light-mode .capture-extras input,.light-mode .capture-extras textarea{border-color:rgba(0,0,0,0.1);background:rgba(0,0,0,0.03);color:#1d1d1f}
 .light-mode .capture-extras input::placeholder,.light-mode .capture-extras textarea::placeholder{color:#aeaeb2}
 .btn-again{margin-top:18px;padding:12px 26px;border-radius:22px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .25s;touch-action:manipulation;-webkit-tap-highlight-color:transparent;min-height:44px}
@@ -206,7 +206,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
       <div class="capture-extras">
         <div class="capture-extras-title">Tell us a little bit about yourself</div>
         <input type="text" id="capName" placeholder="Your name (optional)" maxlength="120" autocomplete="name">
-        <textarea id="capConcerns" rows="3" maxlength="2000" placeholder="What cyber risks keep you up at night that weren't covered here? (optional)"></textarea>
+        <textarea id="capConcerns" rows="2" maxlength="2000" placeholder="What cyber risks keep you up at night that weren't covered here? (optional)"></textarea>
       </div>
       <button class="btn-submit" id="btnSubmit" onclick="sendReport()">Submit</button>
       <div class="capture-ok" id="capOk">✓ Thanks — we'll be in touch shortly.</div>
