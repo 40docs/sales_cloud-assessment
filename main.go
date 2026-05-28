@@ -68,6 +68,7 @@ func main() {
 	mux.HandleFunc("/healthz", okHandler)
 
 	mux.HandleFunc("/api/event", recordEvent)
+	mux.HandleFunc("/api/session/new", sessionNewHandler)
 
 	mux.HandleFunc("/admin", adminPortal)
 	mux.HandleFunc("/admin/", http.NotFound)

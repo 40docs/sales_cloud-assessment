@@ -301,6 +301,51 @@ func recordEvent(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// sessionNewHandler rotates the caller to a brand-new session for the same
+// event/presenter as their current (valid) session. The deck calls it from the
+// "Retake Assessment" path so each run — a new passer-by on a shared iPad, or
+// the same person going again — gets its own picks and can't blend scores with
+// the previous run. Bounded by the original link's expiry, which rides on the
+// session token, so it can't be used to mint sessions past the event window.
+func sessionNewHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	c, err := r.Cookie(sessCookieName)
+	if err != nil {
+		http.Error(w, "no session", http.StatusUnauthorized)
+		return
+	}
+	sess, err := parseSessionToken(c.Value)
+	if err != nil {
+		http.Error(w, "your session has expired — re-scan the event QR code", http.StatusUnauthorized)
+		return
+	}
+	exp := sess.ExpiresAt.Time
+	sid := uuid.NewString()
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO sessions(id, event_id, presenter_id, ua, ip_hash, started_at)
+		 VALUES ($1,$2,$3,$4,$5,now())`,
+		sid, sess.EventID, sess.PresenterID, truncate(r.UserAgent(), 256), clientIPHash(r)); err != nil {
+		log.Printf("session rotate insert: %v", err)
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	tok, err := mintSessionToken(sid, sess.EventID, sess.PresenterID, exp)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name: sessCookieName, Value: tok, Path: "/",
+		Expires: exp, HttpOnly: true, Secure: cookieSecure, SameSite: http.SameSiteLaxMode,
+	})
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func adminAuthed(r *http.Request) bool {
 	c, err := r.Cookie(adminCookieName)
 	if err != nil {

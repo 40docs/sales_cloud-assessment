@@ -559,6 +559,18 @@ updatePips();
       return origSendReport();
     };
   }
+  if (typeof window.restart === 'function') {
+    var origRestart = window.restart;
+    window.restart = function(){
+      // Rotate to a fresh server session before resetting the UI, so each run —
+      // a new passer-by on a shared device, or the same person retaking — gets
+      // its own picks and can't blend with the previous run. Reset regardless.
+      fetch('/api/session/new',{method:'POST',credentials:'same-origin',keepalive:true})
+        .then(function(r){ if(r.status===401){ alert('Your session has expired — please re-scan the event QR code.'); } })
+        .catch(function(){})
+        .finally(function(){ origRestart(); });
+    };
+  }
   setTimeout(function(){post({event:'phase_enter', phase:'sceneIntro', dwell_ms:0});},0);
   window.addEventListener('pagehide', function(){ post({event:'session_end'}); });
 })();
