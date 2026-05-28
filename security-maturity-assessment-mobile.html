@@ -129,6 +129,14 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
 .btn-submit:active{filter:brightness(1.1);transform:scale(0.98)}
 .capture-ok{display:none;font-size:14px;color:var(--green);font-weight:600;margin-top:14px}
 .capture-ok.show{display:block}
+.capture-extras{max-width:520px;margin:18px auto 4px;display:flex;flex-direction:column;gap:10px;text-align:left}
+.capture-extras-title{font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text2);text-align:center;margin-bottom:4px}
+.capture-extras input,.capture-extras textarea{width:100%;box-sizing:border-box;padding:11px 14px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:var(--text);font-size:14px;font-family:inherit;outline:none;transition:border-color .2s}
+.capture-extras input:focus,.capture-extras textarea:focus{border-color:rgba(218,41,28,0.5)}
+.capture-extras input::placeholder,.capture-extras textarea::placeholder{color:var(--text3)}
+.capture-extras textarea{resize:vertical;min-height:78px;line-height:1.45}
+.light-mode .capture-extras input,.light-mode .capture-extras textarea{border-color:rgba(0,0,0,0.1);background:rgba(0,0,0,0.03);color:#1d1d1f}
+.light-mode .capture-extras input::placeholder,.light-mode .capture-extras textarea::placeholder{color:#aeaeb2}
 .btn-again{margin-top:18px;padding:12px 26px;border-radius:22px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .25s;touch-action:manipulation;-webkit-tap-highlight-color:transparent;min-height:44px}
 .btn-again:hover{background:rgba(255,255,255,0.1)}
 
@@ -195,6 +203,11 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
       <div class="divider"></div>
       <div class="capture-title">Want a deeper conversation?</div>
       <div class="capture-desc">Submit your results and one of our engineers will reach out to walk through your flagged areas with you.</div>
+      <div class="capture-extras">
+        <div class="capture-extras-title">Tell us a little bit about yourself</div>
+        <input type="text" id="capName" placeholder="Your name (optional)" maxlength="120" autocomplete="name">
+        <textarea id="capConcerns" rows="3" maxlength="2000" placeholder="What cyber risks keep you up at night that weren't covered here? (optional)"></textarea>
+      </div>
       <button class="btn-submit" id="btnSubmit" onclick="sendReport()">Submit</button>
       <div class="capture-ok" id="capOk">✓ Thanks — we'll be in touch shortly.</div>
       <button class="btn-again" onclick="restart()">↺ Retake Assessment</button>
@@ -493,6 +506,7 @@ function restart(){
   document.getElementById('btnStart').disabled=true;
   current=0;
   Object.keys(scores).forEach(k=>delete scores[k]);
+  ['capName','capConcerns'].forEach(id=>{var el=document.getElementById(id);if(el)el.value='';});
   updatePips();
   goTo('sceneIntro');
 }
@@ -546,9 +560,14 @@ updatePips();
           // Submit must know whether it actually landed, so use fetch (not the
           // fire-and-forget beacon) and warn the attendee if their session was
           // deleted/expired rather than letting the lead vanish silently.
+          var p={event:'submit', email:userEmail, scores:scores};
+          var nEl=document.getElementById('capName');
+          if(nEl&&nEl.value.trim())p.name=nEl.value.trim();
+          var cEl=document.getElementById('capConcerns');
+          if(cEl&&cEl.value.trim())p.concerns=cEl.value.trim();
           fetch('/api/event',{method:'POST',credentials:'same-origin',
             headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({event:'submit', email:userEmail, scores:scores})})
+            body:JSON.stringify(p)})
             .then(function(r){
               if(r.status===401){
                 alert('Your session has expired — please re-scan the event QR code so your results can be saved.');

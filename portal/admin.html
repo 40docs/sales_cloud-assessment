@@ -37,6 +37,16 @@ body{font-family:'Inter',system-ui,sans-serif;color:var(--text);-webkit-font-smo
 .lead-actions{display:flex;align-items:center;gap:8px}
 .lead-remove{width:22px;height:22px;border-radius:6px;border:1px solid var(--border);background:none;color:var(--text3);font-size:14px;line-height:1;cursor:pointer;font-family:inherit;flex:none}
 .lead-remove:hover{color:var(--red);border-color:var(--red)}
+.lead-name{font-size:11px;color:var(--text3);margin-top:2px;font-weight:400}
+.lead-concerns-btn{width:22px;height:22px;border-radius:6px;border:1px solid var(--border);background:none;color:var(--text3);font-size:12px;line-height:1;cursor:pointer;font-family:inherit;flex:none;padding:0;display:flex;align-items:center;justify-content:center}
+.lead-concerns-btn:hover{color:var(--text);border-color:var(--text2)}
+.lead-concerns-btn.active{color:var(--text);border-color:var(--text2);background:rgba(255,255,255,0.06)}
+.light-mode .lead-concerns-btn.active{background:rgba(0,0,0,0.05)}
+.lead-concerns-row.hidden{display:none}
+.lead-concerns-cell{padding:14px 22px;background:rgba(255,255,255,0.02);border-bottom:1px solid var(--border);font-size:13px;color:var(--text2);line-height:1.5}
+.light-mode .lead-concerns-cell{background:rgba(0,0,0,0.02)}
+.lead-concerns-label{font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:6px}
+.lead-concerns-text{white-space:pre-wrap;word-break:break-word}
 .token-status{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
 .token-status.active{color:#3CB17E}
 .token-status.pending{color:#e0a32e}
@@ -521,15 +531,27 @@ function renderLeads(leads){
     const dm=l.domains||{};
     const pct=Math.round((l.totalScore||0)/MAX_SCORE*100);
     const priority=l.band==='Significant Gaps';
+    const name=(l.name||'').trim();
+    const concerns=(l.concerns||'').trim();
     const tr=document.createElement('tr');
     if(priority)tr.className='priority';
     tr.innerHTML=
-      '<td><div class="email">'+esc(l.email)+'</div></td>'+
+      '<td><div class="email">'+esc(l.email)+'</div>'+(name?'<div class="lead-name">'+esc(name)+'</div>':'')+'</td>'+
       '<td><div class="timestamp">'+esc(fmtTime(l.submittedAt))+'</div></td>'+
       domainCell(dm.network)+domainCell(dm.app)+domainCell(dm.cnapp)+domainCell(dm.sspm)+
       '<td><span class="score '+scoreClass(pct)+'">'+pct+'%</span></td>'+
-      '<td class="lead-actions">'+statusSelect(l)+'<button class="lead-remove" data-id="'+l.submissionId+'" title="Remove lead (deletes its session)">&times;</button></td>';
+      '<td class="lead-actions">'+
+        (concerns?'<button class="lead-concerns-btn" title="Show what keeps them up at night" aria-label="Show concerns">&#128173;</button>':'')+
+        statusSelect(l)+
+        '<button class="lead-remove" data-id="'+l.submissionId+'" title="Remove lead">&times;</button>'+
+      '</td>';
     body.appendChild(tr);
+    if(concerns){
+      const cr=document.createElement('tr');
+      cr.className='lead-concerns-row hidden';
+      cr.innerHTML='<td class="lead-concerns-cell" colspan="8"><div class="lead-concerns-label">What keeps them up at night</div><div class="lead-concerns-text">'+esc(concerns)+'</div></td>';
+      body.appendChild(cr);
+    }
   });
   body.querySelectorAll('.status-select').forEach(sel=>{
     sel.addEventListener('change',async()=>{
@@ -561,6 +583,14 @@ function renderLeads(leads){
       loadStats();
       loadLeads();
       loadEvents();
+    });
+  });
+  body.querySelectorAll('.lead-concerns-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const row=btn.closest('tr').nextElementSibling;
+      if(!row||!row.classList.contains('lead-concerns-row'))return;
+      row.classList.toggle('hidden');
+      btn.classList.toggle('active',!row.classList.contains('hidden'));
     });
   });
 }
