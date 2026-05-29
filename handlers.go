@@ -1179,6 +1179,86 @@ type mintedToken struct {
 	MintedAt    time.Time  `json:"mintedAt"`
 }
 
+// adminTokensRegenerateHandler clones an existing minted_tokens row's
+// event/presenter/window and mints a brand-new token (new jti, new signature).
+// The original token is NOT invalidated — JWTs in this codebase are stateless
+// and there is no revocation. Used by the Tokens tab's Regenerate button when
+// an admin needs to reproduce a URL/QR without keeping the original token
+// string around.
+func adminTokensRegenerateHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !authorizeAdmin(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	var req struct {
+		TokenID string `json:"token_id"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 256)).Decode(&req); err != nil {
+		http.Error(w, "bad json", http.StatusBadRequest)
+		return
+	}
+	req.TokenID = strings.TrimSpace(req.TokenID)
+	if req.TokenID == "" {
+		http.Error(w, "token_id required", http.StatusBadRequest)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	var (
+		eventID, eventName, presenterID string
+		nbf, exp                        time.Time
+	)
+	err := db.QueryRowContext(ctx, `
+		SELECT event_id,
+			COALESCE(event_name, ''),
+			COALESCE(presenter_id, ''),
+			not_before,
+			expires_at
+		FROM minted_tokens WHERE id = $1`, req.TokenID).
+		Scan(&eventID, &eventName, &presenterID, &nbf, &exp)
+	if errors.Is(err, sql.ErrNoRows) {
+		http.Error(w, "unknown token", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		log.Printf("regen lookup: %v", err)
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if exp.Before(time.Now()) {
+		http.Error(w, "this token's window has already expired — mint a fresh one from the Mint tab", http.StatusBadRequest)
+		return
+	}
+	newID := uuid.NewString()
+	tok, err := mintURLToken(newID, eventID, eventName, presenterID, nbf, exp)
+	if err != nil {
+		http.Error(w, "mint failed", http.StatusInternalServerError)
+		return
+	}
+	// Record the new mint for the Tokens tab (best-effort; never fail the
+	// response on a logging error).
+	mctx, mcancel := context.WithTimeout(r.Context(), 5*time.Second)
+	if _, derr := db.ExecContext(mctx, `
+		INSERT INTO minted_tokens (id, event_id, event_name, presenter_id, not_before, expires_at)
+		VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), $5, $6)`,
+		newID, eventID, eventName, presenterID, nbf, exp); derr != nil {
+		log.Printf("regen log: %v", derr)
+	}
+	mcancel()
+	log.Printf("admin regen base=%s new=%s event=%q presenter=%q exp=%s ip=%s",
+		req.TokenID, newID, eventID, presenterID, exp.Format(time.RFC3339), clientIP(r))
+	resp := mintResponse{Token: tok}
+	if base := envOr("PUBLIC_URL", ""); base != "" {
+		resp.URL = strings.TrimRight(base, "/") + "/?t=" + tok
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
 // adminTokensHandler lists minted tokens for the admin Tokens tab (view/log only).
 func adminTokensHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {

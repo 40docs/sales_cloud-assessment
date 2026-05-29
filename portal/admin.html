@@ -47,6 +47,9 @@ body{font-family:'Inter',system-ui,sans-serif;color:var(--text);-webkit-font-smo
 .light-mode .lead-concerns-cell{background:rgba(0,0,0,0.02)}
 .lead-concerns-label{font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:6px}
 .lead-concerns-text{white-space:pre-wrap;word-break:break-word}
+.regen-btn{padding:6px 12px;border-radius:14px;border:1px solid var(--border2);background:none;color:var(--text2);font-size:11px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;cursor:pointer;font-family:inherit;transition:all .15s}
+.regen-btn:hover{color:var(--text);border-color:var(--text3)}
+.regen-btn:disabled{opacity:.5;cursor:wait}
 .token-status{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
 .token-status.active{color:#3CB17E}
 .token-status.pending{color:#e0a32e}
@@ -363,6 +366,7 @@ button.primary:hover{filter:brightness(1.08)}
               <th>Window</th>
               <th>Minted</th>
               <th>Status</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody id="tokensBody"></tbody>
@@ -650,7 +654,7 @@ function renderTokens(tokens){
   const count=document.getElementById('tokensCount');
   body.innerHTML='';
   if(!tokens.length){
-    body.innerHTML='<tr><td colspan="6" style="padding:32px 16px;text-align:center;color:var(--text3);font-size:13px">No tokens minted yet.</td></tr>';
+    body.innerHTML='<tr><td colspan="7" style="padding:32px 16px;text-align:center;color:var(--text3);font-size:13px">No tokens minted yet.</td></tr>';
     count.textContent='No tokens';
     return;
   }
@@ -663,6 +667,7 @@ function renderTokens(tokens){
     if(nb&&now<nb)status='pending';
     else if(ex&&now>ex)status='expired';
     const win=(t.notBefore?fmtTime(t.notBefore):'—')+' → '+(t.expiresAt?fmtTime(t.expiresAt):'—');
+    const canRegen=status!=='expired';
     const tr=document.createElement('tr');
     tr.innerHTML=
       '<td>'+esc(t.eventId)+'</td>'+
@@ -670,8 +675,30 @@ function renderTokens(tokens){
       '<td>'+esc(t.presenterId||'—')+'</td>'+
       '<td><div class="timestamp">'+esc(win)+'</div></td>'+
       '<td><div class="timestamp">'+esc(fmtTime(t.mintedAt))+'</div></td>'+
-      '<td><span class="token-status '+status+'">'+status+'</span></td>';
+      '<td><span class="token-status '+status+'">'+status+'</span></td>'+
+      '<td>'+(canRegen
+        ? '<button class="regen-btn" data-id="'+esc(t.id)+'" data-name="'+esc(t.eventName||t.eventId)+'" title="Mint a new token with these same details">Regenerate</button>'
+        : '<span style="color:var(--text3);font-size:11px">—</span>')+'</td>';
     body.appendChild(tr);
+  });
+  body.querySelectorAll('.regen-btn').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      btn.disabled=true;
+      try {
+        const r=await fetch('/admin/tokens/regenerate',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          credentials:'same-origin',
+          body:JSON.stringify({token_id:btn.dataset.id})
+        });
+        if(!r.ok){alert('Regenerate failed: '+r.status+' '+await r.text());return;}
+        const data=await r.json();
+        showMintResult(btn.dataset.name, data.url||data.token);
+        document.querySelector('.tab[data-tab="mint"]').click();
+      } finally {
+        btn.disabled=false;
+      }
+    });
   });
 }
 
@@ -714,15 +741,17 @@ document.getElementById('mintForm').addEventListener('submit', async function(e)
   const r=await fetch('/admin/mint',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),credentials:'same-origin'});
   if(!r.ok){alert('Mint failed: '+r.status+' '+await r.text());return;}
   const data=await r.json();
-  const url=data.url||data.token;
-  document.getElementById('evName').textContent=payload.event_name||payload.event_id;
+  showMintResult(payload.event_name||payload.event_id, data.url||data.token);
+});
+function showMintResult(eventName,url){
+  document.getElementById('evName').textContent=eventName;
   document.getElementById('url').textContent=url;
   const qrSrc='/admin/qr?data='+encodeURIComponent(url);
   document.getElementById('qr').src=qrSrc;
   document.getElementById('download').href=qrSrc;
   document.getElementById('result').hidden=false;
   document.getElementById('placeholder').hidden=true;
-});
+}
 async function copyUrl(){
   const txt=document.getElementById('url').textContent;
   try{await navigator.clipboard.writeText(txt);showOk('Copied');}catch(e){showOk('Select to copy');}
