@@ -469,14 +469,24 @@ function filterQS(){
 function populatePresenters(){
   const eSel=document.getElementById('filterEvent');
   const pSel=document.getElementById('filterPresenter');
-  const ev=EVENTS.find(x=>x.event===eSel.value);
   pSel.innerHTML='<option value="">All presenters</option>';
-  if(ev&&ev.presenters&&ev.presenters.length){
-    pSel.disabled=false;
-    ev.presenters.forEach(p=>{pSel.innerHTML+='<option value="'+esc(p)+'">'+esc(p)+'</option>';});
-  }else{
-    pSel.disabled=true;
+  pSel.disabled=false;
+  let presenters;
+  if(eSel.value){
+    // A specific event is selected — keep the cascade and show only that
+    // event's presenters.
+    const ev=EVENTS.find(x=>x.event===eSel.value);
+    presenters=(ev&&ev.presenters)?ev.presenters:[];
+  } else {
+    // "All events" — show every distinct presenter across all events so an
+    // admin can drill into one presenter's cross-event stats. Server's
+    // event/presenter filters are independent, so this just works.
+    const set=new Set();
+    EVENTS.forEach(ev=>(ev.presenters||[]).forEach(p=>p&&set.add(p)));
+    presenters=Array.from(set).sort();
   }
+  presenters.forEach(p=>{pSel.innerHTML+='<option value="'+esc(p)+'">'+esc(p)+'</option>';});
+  if(!presenters.length) pSel.disabled=true;
 }
 async function loadEvents(){
   const r=await fetch('/admin/events',{credentials:'same-origin'});
