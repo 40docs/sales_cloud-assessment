@@ -107,6 +107,11 @@ body{font-family:'Inter',system-ui,sans-serif;color:var(--text);-webkit-font-smo
 
 table{width:100%;border-collapse:collapse}
 thead th{text-align:left;padding:12px 16px;font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);border-bottom:1px solid var(--border);background:rgba(255,255,255,0.02);white-space:nowrap}
+thead th.sort{cursor:pointer;user-select:none;-webkit-user-select:none;transition:color .15s}
+thead th.sort:hover{color:var(--text)}
+thead th.sort .sort-arrow{display:inline-block;width:10px;margin-left:6px;font-size:10px;opacity:.35;vertical-align:1px;transition:opacity .15s,color .15s}
+thead th.sort.active{color:var(--text)}
+thead th.sort.active .sort-arrow{opacity:1}
 tbody td{padding:14px 16px;font-size:13px;border-bottom:1px solid var(--border);vertical-align:middle}
 tbody tr:last-child td{border-bottom:none}
 tbody tr.priority{background:rgba(218,41,28,0.04)}
@@ -288,14 +293,14 @@ button.primary:hover{filter:brightness(1.08)}
         <table>
           <thead>
             <tr>
-              <th>Email</th>
-              <th>Submitted</th>
-              <th>Network</th>
-              <th>App</th>
-              <th>Cloud</th>
-              <th>Service</th>
-              <th>Score</th>
-              <th>Status</th>
+              <th class="sort" data-sort-key="email">Email<span class="sort-arrow"></span></th>
+              <th class="sort" data-sort-key="submittedAt">Submitted<span class="sort-arrow"></span></th>
+              <th class="sort" data-sort-key="network">Network<span class="sort-arrow"></span></th>
+              <th class="sort" data-sort-key="app">App<span class="sort-arrow"></span></th>
+              <th class="sort" data-sort-key="cnapp">Cloud<span class="sort-arrow"></span></th>
+              <th class="sort" data-sort-key="sspm">Service<span class="sort-arrow"></span></th>
+              <th class="sort" data-sort-key="totalScore">Score<span class="sort-arrow"></span></th>
+              <th class="sort" data-sort-key="status">Status<span class="sort-arrow"></span></th>
             </tr>
           </thead>
           <tbody id="leadsBody"></tbody>
@@ -419,6 +424,34 @@ const STATUS_OPTIONS=[
 const MAX_SCORE=8; // 4 scenarios * 2
 
 let EVENTS=[];
+let leadsSort={key:'submittedAt',dir:'desc'};
+let lastLeads=[];
+function leadSortValue(l,key){
+  switch(key){
+    case 'email': return (l.email||'').toLowerCase();
+    case 'submittedAt': return l.submittedAt||'';
+    case 'network': case 'app': case 'cnapp': case 'sspm':
+      return (l.domains && l.domains[key] ? l.domains[key].score : -1);
+    case 'totalScore': return l.totalScore||0;
+    case 'status': return STATUS_OPTIONS.findIndex(o=>o.v===(l.status||'new'));
+    default: return '';
+  }
+}
+function sortLeads(leads){
+  const d=leadsSort.dir==='asc'?1:-1;
+  return leads.slice().sort((a,b)=>{
+    const va=leadSortValue(a,leadsSort.key), vb=leadSortValue(b,leadsSort.key);
+    if(va<vb)return -d; if(va>vb)return d; return 0;
+  });
+}
+function updateSortArrows(){
+  document.querySelectorAll('thead th.sort').forEach(th=>{
+    const active=th.dataset.sortKey===leadsSort.key;
+    th.classList.toggle('active',active);
+    const a=th.querySelector('.sort-arrow');
+    if(a)a.textContent=active?(leadsSort.dir==='asc'?'▲':'▼'):'↕';
+  });
+}
 function filterQS(){
   const e=document.getElementById('filterEvent').value;
   const p=document.getElementById('filterPresenter').value;
@@ -515,6 +548,8 @@ function statusSelect(lead){
 }
 
 function renderLeads(leads){
+  lastLeads=leads;
+  leads=sortLeads(leads);
   const body=document.getElementById('leadsBody');
   const count=document.getElementById('leadsCount');
   const title=document.getElementById('leadsTitle');
@@ -645,6 +680,19 @@ document.getElementById('leadSearch').addEventListener('input',()=>{
   leadSearchTimer=setTimeout(loadLeads,250);
 });
 
+document.querySelectorAll('thead th.sort').forEach(th=>{
+  th.addEventListener('click',()=>{
+    const key=th.dataset.sortKey;
+    if(leadsSort.key===key){
+      leadsSort.dir=leadsSort.dir==='asc'?'desc':'asc';
+    } else {
+      leadsSort={key,dir:'asc'};
+    }
+    updateSortArrows();
+    if(lastLeads.length) renderLeads(lastLeads);
+  });
+});
+updateSortArrows();
 loadEvents().then(()=>{loadStats();loadLeads();});
 
 // ── Mint (ported from portal.html, unchanged behavior) ────────────────
