@@ -532,11 +532,13 @@ function renderLeads(leads){
     const pct=Math.round((l.totalScore||0)/MAX_SCORE*100);
     const priority=l.band==='Significant Gaps';
     const name=(l.name||'').trim();
+    const title=(l.title||'').trim();
     const concerns=(l.concerns||'').trim();
+    const nameTitle=[name, title].filter(Boolean).map(esc).join(' &middot; ');
     const tr=document.createElement('tr');
     if(priority)tr.className='priority';
     tr.innerHTML=
-      '<td><div class="email">'+esc(l.email)+'</div>'+(name?'<div class="lead-name">'+esc(name)+'</div>':'')+'</td>'+
+      '<td><div class="email">'+esc(l.email)+'</div>'+(nameTitle?'<div class="lead-name">'+nameTitle+'</div>':'')+'</td>'+
       '<td><div class="timestamp">'+esc(fmtTime(l.submittedAt))+'</div></td>'+
       domainCell(dm.network)+domainCell(dm.app)+domainCell(dm.cnapp)+domainCell(dm.sspm)+
       '<td><span class="score '+scoreClass(pct)+'">'+pct+'%</span></td>'+

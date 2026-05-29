@@ -213,6 +213,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
       <div class="capture-extras">
         <div class="capture-extras-title">Tell us a little bit about yourself</div>
         <input type="text" id="capName" placeholder="Your name (optional)" maxlength="120" autocomplete="name">
+        <input type="text" id="capTitle" placeholder="Your title (optional)" maxlength="120" autocomplete="organization-title">
         <textarea id="capConcerns" rows="2" maxlength="2000" placeholder="What cyber risks keep you up at night that weren't covered here? (optional)"></textarea>
       </div>
       <button class="btn-submit" id="btnSubmit" onclick="sendReport()">Submit</button>
@@ -518,7 +519,7 @@ function restart(){
   document.getElementById('btnStart').disabled=true;
   current=0;
   Object.keys(scores).forEach(k=>delete scores[k]);
-  ['capName','capConcerns'].forEach(id=>{var el=document.getElementById(id);if(el)el.value='';});
+  ['capName','capTitle','capConcerns'].forEach(id=>{var el=document.getElementById(id);if(el)el.value='';});
   updatePips();
   goTo('sceneIntro');
 }
@@ -575,6 +576,8 @@ updatePips();
           var p={event:'submit', email:userEmail, scores:scores};
           var nEl=document.getElementById('capName');
           if(nEl&&nEl.value.trim())p.name=nEl.value.trim();
+          var tEl=document.getElementById('capTitle');
+          if(tEl&&tEl.value.trim())p.title=tEl.value.trim();
           var cEl=document.getElementById('capConcerns');
           if(cEl&&cEl.value.trim())p.concerns=cEl.value.trim();
           fetch('/api/event',{method:'POST',credentials:'same-origin',

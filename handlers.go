@@ -211,6 +211,7 @@ type eventPayload struct {
 	Color      string          `json:"color,omitempty"`
 	Email      string          `json:"email,omitempty"`
 	Name       string          `json:"name,omitempty"`
+	Title      string          `json:"title,omitempty"`
 	Concerns   string          `json:"concerns,omitempty"`
 	Scores     json.RawMessage `json:"scores,omitempty"`
 }
@@ -293,11 +294,12 @@ func recordEvent(w http.ResponseWriter, r *http.Request) {
 		// over-long input rather than rejecting — they're nice-to-haves and we
 		// don't want to lose a lead because someone pasted a wall of text.
 		name := truncate(strings.TrimSpace(p.Name), 120)
+		title := truncate(strings.TrimSpace(p.Title), 120)
 		concerns := truncate(strings.TrimSpace(p.Concerns), 2000)
 		_, err = db.ExecContext(ctx,
-			`INSERT INTO submissions(session_id, email, name, concerns, scores)
-			 VALUES ($1,$2,NULLIF($3,''),NULLIF($4,''),$5)`,
-			sess.SessionID, email, name, concerns, []byte(p.Scores))
+			`INSERT INTO submissions(session_id, email, name, title, concerns, scores)
+			 VALUES ($1,$2,NULLIF($3,''),NULLIF($4,''),NULLIF($5,''),$6)`,
+			sess.SessionID, email, name, title, concerns, []byte(p.Scores))
 
 	case "session_end":
 		_, err = db.ExecContext(ctx,
@@ -886,6 +888,7 @@ type leadRow struct {
 	SubmissionID int64                 `json:"submissionId"`
 	Email        string                `json:"email"`
 	Name         string                `json:"name,omitempty"`
+	Title        string                `json:"title,omitempty"`
 	Concerns     string                `json:"concerns,omitempty"`
 	SubmittedAt  time.Time             `json:"submittedAt"`
 	Domains      map[string]leadDomain `json:"domains"` // keyed by scenario id
@@ -917,7 +920,8 @@ func adminLeadsHandler(w http.ResponseWriter, r *http.Request) {
 	// session so we can attach per-domain picks. $1 is the email filter:
 	// empty string matches everything ('%%').
 	rows, err := db.QueryContext(ctx, `
-		SELECT s.id, s.email, COALESCE(s.name, ''), COALESCE(s.concerns, ''),
+		SELECT s.id, s.email, COALESCE(s.name, ''), COALESCE(s.title, ''),
+			COALESCE(s.concerns, ''),
 			s.submitted_at, s.session_id,
 			COALESCE(ls.status, 'new') AS status
 		FROM submissions s
@@ -945,7 +949,7 @@ func adminLeadsHandler(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var l leadRow
 		var sessionID string
-		if err := rows.Scan(&l.SubmissionID, &l.Email, &l.Name, &l.Concerns, &l.SubmittedAt, &sessionID, &l.Status); err != nil {
+		if err := rows.Scan(&l.SubmissionID, &l.Email, &l.Name, &l.Title, &l.Concerns, &l.SubmittedAt, &sessionID, &l.Status); err != nil {
 			log.Printf("leads scan: %v", err)
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
