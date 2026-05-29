@@ -758,6 +758,22 @@ document.getElementById('mintForm').addEventListener('submit', async function(e)
   const data=await r.json();
   showMintResult(payload.event_name||payload.event_id, data.url||data.token);
 });
+// Date inputs: open the picker programmatically on click. Our visible
+// calendar SVG is painted as a background-image so Safari shows an icon;
+// Chrome's native ::-webkit-calendar-picker-indicator is hidden (opacity:0)
+// to avoid two icons, but that indicator is also where Chrome's "click to
+// open the picker" lives, and our padding-right shifts it away from where
+// the visible icon is. showPicker() sidesteps all of that — a click anywhere
+// on the input reliably opens the native picker on every modern browser.
+document.querySelectorAll('form.mint input[type="date"]').forEach(input=>{
+  input.addEventListener('mousedown',e=>{
+    if(typeof input.showPicker==='function'){
+      e.preventDefault();
+      try{input.showPicker();}catch(_){}
+    }
+  });
+});
+
 function showMintResult(eventName,url){
   document.getElementById('evName').textContent=eventName;
   document.getElementById('url').textContent=url;
