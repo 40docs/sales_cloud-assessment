@@ -78,6 +78,7 @@ func main() {
 	mux.HandleFunc("/admin/qr", adminQR)
 	mux.HandleFunc("/admin/stats", adminStatsHandler)
 	mux.HandleFunc("/admin/leads", adminLeadsHandler)
+	mux.HandleFunc("/admin/leads.csv", adminLeadsCSVHandler)
 	mux.HandleFunc("/admin/leads/status", adminLeadStatusHandler)
 	mux.HandleFunc("/admin/leads/delete", adminLeadDeleteHandler)
 	mux.HandleFunc("/admin/events", adminEventsHandler)

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"database/sql"
+	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -14,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -891,6 +893,9 @@ type leadRow struct {
 	Title        string                `json:"title,omitempty"`
 	Concerns     string                `json:"concerns,omitempty"`
 	SubmittedAt  time.Time             `json:"submittedAt"`
+	EventID      string                `json:"eventId,omitempty"`
+	EventName    string                `json:"eventName,omitempty"`
+	Presenter    string                `json:"presenter,omitempty"`
 	Domains      map[string]leadDomain `json:"domains"` // keyed by scenario id
 	TotalScore   int                   `json:"totalScore"`
 	Band         string                `json:"band"`
@@ -906,36 +911,66 @@ func adminLeadsHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	q := strings.TrimSpace(r.URL.Query().Get("q"))
-	if len(q) > 256 {
-		q = q[:256]
-	}
-	event := strings.TrimSpace(r.URL.Query().Get("event"))
-	presenter := strings.TrimSpace(r.URL.Query().Get("presenter"))
+	q, event, presenter := leadFilters(r)
 
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	// One row per submission, with the lead status (default 'new') and the
-	// session so we can attach per-domain picks. $1 is the email filter:
-	// empty string matches everything ('%%').
+	leads, err := loadLeads(ctx, q, event, presenter)
+	if err != nil {
+		log.Printf("leads load: %v", err)
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(leads)
+}
+
+// leadFilters reads the shared q/event/presenter query params used by both the
+// dashboard JSON list and the CSV export.
+func leadFilters(r *http.Request) (q, event, presenter string) {
+	q = strings.TrimSpace(r.URL.Query().Get("q"))
+	if len(q) > 256 {
+		q = q[:256]
+	}
+	event = strings.TrimSpace(r.URL.Query().Get("event"))
+	presenter = strings.TrimSpace(r.URL.Query().Get("presenter"))
+	return
+}
+
+// loadLeads returns one row per submission (newest first, capped at 500) with
+// the lead status, event/presenter context, and per-domain picks, total score
+// and posture band attached. Shared by the dashboard JSON endpoint and the CSV
+// export so the two can never drift apart.
+func loadLeads(ctx context.Context, q, event, presenter string) ([]leadRow, error) {
+	// One row per submission, with the lead status (default 'new'), the session
+	// so we can attach per-domain picks, and the event name resolved from the
+	// minted token (an event can have several tokens; max() picks one name).
+	// $1 is the email filter: empty string matches everything ('%%').
 	rows, err := db.QueryContext(ctx, `
 		SELECT s.id, s.email, COALESCE(s.name, ''), COALESCE(s.title, ''),
 			COALESCE(s.concerns, ''),
 			s.submitted_at, s.session_id,
+			sess.event_id, COALESCE(sess.presenter_id, ''),
+			COALESCE(mt.event_name, ''),
 			COALESCE(ls.status, 'new') AS status
 		FROM submissions s
 		JOIN sessions sess ON sess.id = s.session_id
 		LEFT JOIN lead_status ls ON ls.submission_id = s.id
+		LEFT JOIN (
+			SELECT event_id, max(event_name) AS event_name
+			FROM minted_tokens
+			GROUP BY event_id
+		) mt ON mt.event_id = sess.event_id
 		WHERE s.email ILIKE '%' || $1 || '%'
 		  AND (sess.event_id = $2 OR $2 = '')
 		  AND (COALESCE(sess.presenter_id,'') = $3 OR $3 = '')
 		ORDER BY s.submitted_at DESC
 		LIMIT 500`, q, event, presenter)
 	if err != nil {
-		log.Printf("leads query: %v", err)
-		http.Error(w, "server error", http.StatusInternalServerError)
-		return
+		return nil, err
 	}
 	defer rows.Close()
 
@@ -949,10 +984,8 @@ func adminLeadsHandler(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var l leadRow
 		var sessionID string
-		if err := rows.Scan(&l.SubmissionID, &l.Email, &l.Name, &l.Title, &l.Concerns, &l.SubmittedAt, &sessionID, &l.Status); err != nil {
-			log.Printf("leads scan: %v", err)
-			http.Error(w, "server error", http.StatusInternalServerError)
-			return
+		if err := rows.Scan(&l.SubmissionID, &l.Email, &l.Name, &l.Title, &l.Concerns, &l.SubmittedAt, &sessionID, &l.EventID, &l.Presenter, &l.EventName, &l.Status); err != nil {
+			return nil, err
 		}
 		l.Domains = map[string]leadDomain{}
 		for _, id := range scenarioOrder {
@@ -963,9 +996,7 @@ func adminLeadsHandler(w http.ResponseWriter, r *http.Request) {
 		leads = append(leads, l)
 	}
 	if err := rows.Err(); err != nil {
-		log.Printf("leads rows: %v", err)
-		http.Error(w, "server error", http.StatusInternalServerError)
-		return
+		return nil, err
 	}
 
 	// Attach per-domain picks for just the sessions we loaded. We re-apply the
@@ -986,18 +1017,14 @@ func adminLeadsHandler(w http.ResponseWriter, r *http.Request) {
 			)
 			ORDER BY p.session_id, p.scenario, p.picked_at DESC`, q, event, presenter)
 		if err != nil {
-			log.Printf("leads picks: %v", err)
-			http.Error(w, "server error", http.StatusInternalServerError)
-			return
+			return nil, err
 		}
 		defer prows.Close()
 		for prows.Next() {
 			var sessionID, scenario, color string
 			var score int
 			if err := prows.Scan(&sessionID, &scenario, &score, &color); err != nil {
-				log.Printf("leads picks scan: %v", err)
-				http.Error(w, "server error", http.StatusInternalServerError)
-				return
+				return nil, err
 			}
 			for _, i := range idxBySession[sessionID] {
 				if _, known := leads[i].Domains[scenario]; !known {
@@ -1007,9 +1034,7 @@ func adminLeadsHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if err := prows.Err(); err != nil {
-			log.Printf("leads picks rows: %v", err)
-			http.Error(w, "server error", http.StatusInternalServerError)
-			return
+			return nil, err
 		}
 	}
 
@@ -1032,10 +1057,80 @@ func adminLeadsHandler(w http.ResponseWriter, r *http.Request) {
 			leads[i].Band = postureBand(total, reds)
 		}
 	}
+	return leads, nil
+}
 
-	w.Header().Set("Content-Type", "application/json")
+// leadCSVDomains is the domain column order + labels for the CSV export,
+// matching the dashboard's Posture-by-Domain ordering (scenarioOrder).
+var leadCSVDomains = []struct{ id, label string }{
+	{"network", "Network Security"},
+	{"app", "Application Security"},
+	{"cnapp", "Cloud Visibility"},
+	{"sspm", "Service Visibility"},
+}
+
+// adminLeadsCSVHandler streams the current (filtered) leads view as a
+// sales-ready CSV: contact + event/presenter context, a score and red/yellow/
+// green rating per domain, the total score, posture band, lead status and the
+// prospect's free-text concerns. Honors the same q/event/presenter filters as
+// the dashboard so "what you see is what you export".
+func adminLeadsCSVHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !adminAuthed(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	q, event, presenter := leadFilters(r)
+
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+
+	leads, err := loadLeads(ctx, q, event, presenter)
+	if err != nil {
+		log.Printf("leads csv load: %v", err)
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	_ = json.NewEncoder(w).Encode(leads)
+	w.Header().Set("Content-Disposition", `attachment; filename="leads-`+time.Now().Format("20060102")+`.csv"`)
+
+	// UTF-8 BOM so Excel renders accented names/venues (e.g. "São Paulo")
+	// correctly instead of mojibake.
+	_, _ = w.Write([]byte("\xef\xbb\xbf"))
+
+	cw := csv.NewWriter(w)
+	header := []string{"Submitted At", "Email", "Name", "Title", "Event ID", "Event Name", "Presenter"}
+	for _, d := range leadCSVDomains {
+		header = append(header, d.label+" Score", d.label+" Rating")
+	}
+	header = append(header, "Total Score", "Posture Band", "Status", "Concerns")
+	_ = cw.Write(header)
+
+	for _, l := range leads {
+		rec := []string{
+			l.SubmittedAt.UTC().Format(time.RFC3339),
+			l.Email, l.Name, l.Title, l.EventID, l.EventName, l.Presenter,
+		}
+		for _, d := range leadCSVDomains {
+			score, rating := "", ""
+			if dom := l.Domains[d.id]; dom.Score >= 0 {
+				score = strconv.Itoa(dom.Score)
+				rating = dom.Color
+			}
+			rec = append(rec, score, rating)
+		}
+		rec = append(rec, strconv.Itoa(l.TotalScore), l.Band, l.Status, l.Concerns)
+		_ = cw.Write(rec)
+	}
+	cw.Flush()
+	if err := cw.Error(); err != nil {
+		log.Printf("leads csv write: %v", err)
+	}
 }
 
 type leadStatusRequest struct {

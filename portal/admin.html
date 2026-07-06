@@ -107,6 +107,11 @@ body{font-family:'Inter',system-ui,sans-serif;color:var(--text);-webkit-font-smo
 .leads-head-filters{display:flex;align-items:center;justify-content:flex-end;gap:14px;flex-wrap:wrap}
 .filter-search{padding:7px 14px 7px 32px;border-radius:14px;border:1px solid var(--border2);background:rgba(255,255,255,0.02);color:var(--text);font-size:12px;font-family:inherit;outline:none;width:240px;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%2386868b'><path d='M11.7 10.3a6 6 0 1 0-1.4 1.4l3 3 1.4-1.4-3-3zM7 11a4 4 0 1 1 0-8 4 4 0 0 1 0 8z'/></svg>");background-repeat:no-repeat;background-position:10px center;background-size:14px;transition:all .15s}
 .filter-search:focus{border-color:rgba(218,41,28,0.5)}
+.export-btn{padding:7px 16px;border-radius:14px;border:1px solid var(--border2);background:rgba(255,255,255,0.02);color:var(--text);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;outline:none;transition:all .15s;white-space:nowrap}
+.export-btn:hover{border-color:var(--text2);color:var(--text)}
+.export-btn:active{background:rgba(255,255,255,0.06)}
+.light-mode .export-btn{background-color:rgba(0,0,0,0.02)}
+.light-mode .export-btn:active{background:rgba(0,0,0,0.05)}
 
 table{width:100%;border-collapse:collapse}
 thead th{text-align:left;padding:12px 16px;font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);border-bottom:1px solid var(--border);background:rgba(255,255,255,0.02);white-space:nowrap}
@@ -295,6 +300,7 @@ button.primary:hover{filter:brightness(1.08)}
           </div>
           <div class="leads-head-filters">
             <input class="filter-search" id="leadSearch" placeholder="Search email">
+            <button type="button" class="export-btn" id="exportCsv" title="Download the current filtered view as a sales-ready CSV">Export CSV</button>
           </div>
         </div>
 
@@ -717,6 +723,13 @@ function renderTokens(tokens){
   });
 }
 
+document.getElementById('exportCsv').addEventListener('click',()=>{
+  // Export exactly what's on screen: same q/event/presenter filters as the
+  // leads list. Navigating to the URL triggers the download (the endpoint sets
+  // Content-Disposition: attachment) without leaving the page.
+  const q=document.getElementById('leadSearch').value.trim();
+  window.location='/admin/leads.csv?q='+encodeURIComponent(q)+'&'+filterQS();
+});
 document.getElementById('leadSearch').addEventListener('input',()=>{
   clearTimeout(leadSearchTimer);
   leadSearchTimer=setTimeout(loadLeads,250);
