@@ -85,7 +85,7 @@ jobs:
         run: |
           cd manifests
           TAG="${GITHUB_SHA::7}"   # matches the type=sha,prefix= image tag (metadata-action 'version' resolves to the branch name, not the sha)
-          yq -i ".spec.source.helm.valuesObject.image.tag = \"$TAG\"" \
+          yq -i "(.spec.source.helm.parameters[] | select(.name == \"image.tag\")).value = \"$TAG\"" \
             manifests-platform/resources/assessment/application.yaml
 
       - name: Commit and push
